@@ -4,16 +4,13 @@ A 24/7 YouTube live stream that shows the progress of [AnyPS5](https://github.co
 
 ## What is on screen
 
-- **Header**: live badge, UTC and Paris clocks, and the freshness of every data source (green, amber when stale, red when down).
-- **Key figures**: system libraries implemented (percentage, functions done / declared, gains over 24 hours and 7 days), GPU shader coverage, PRs merged in 24 hours and 7 days, open PRs, open issues, playable games, GitHub stars and forks, latest release.
-- **Functions over time**: implemented and declared functions since the project started publishing its history, with a marker on each day a wave of PS5 exports was declared.
-- **Libraries**: complete / in progress / not started, the libraries that gained the most since the previous day, and the largest libraries with their progress.
+- **Key figures**: system libraries implemented (percentage, functions done / declared, gains over 24 hours and 7 days), PRs merged today and this week, open PRs, playable games, GitHub stars and the latest release.
+- **System libraries map**: the same squarified treemap as the progress map in AnyPS5's README, redrawn live: one block per library sized by its function count, filled with one cell per function, implemented ones first.
 - **Latest merged PRs**: author, age, and the number of functions each PR implemented, read from the project's progress-report bot.
-- **Major changes & discoveries**: new libraries, exports discovered, big daily jumps, completion-rate shifts (with the reason when the total widened), milestones, completed libraries, new releases.
-- **Games by stage**: the AnyPS5 roadmap's tracked games from "Converts" to "Playable", and the latest stage change.
-- **CI on main**: the latest run of each workflow, and the latest commits.
-- **Top contributors** over the last 100 merged PRs.
-- **Live feed**: a scrolling ticker of events, merges and commits.
+- **Functions over time**: implemented and declared functions since the project started publishing its history.
+- **Major changes**: new libraries, exports discovered, big daily jumps, completion-rate shifts (with the reason when the total widened), milestones, completed libraries, new releases.
+- **Games by stage**: the AnyPS5 roadmap's tracked games from "Converts" to "Playable".
+- A UTC clock in the corner.
 
 ## How it works
 
@@ -30,12 +27,12 @@ A 24/7 YouTube live stream that shows the progress of [AnyPS5](https://github.co
 |---|---|---|
 | Progress, per-library counts | `https://boykopovar.github.io/AnyPS5/progress.json` | 10 / 15 min |
 | History | `https://boykopovar.github.io/AnyPS5/history.json` | 30 min |
-| Merged PRs, commits, CI | GitHub REST API | 2 / 6 min |
-| Open PRs, issues, merges per period | GitHub search API | 5 / 10 min |
-| Stars, forks, latest release | GitHub REST API | 10 / 30 min |
-| Games by stage and their changes | `https://alxcbtw.github.io/anyps5-roadmap/` (`roadmap.json`, `feed.json`) | 3 h / 30 min |
+| Merged PRs and their progress reports | GitHub REST API | 2 / 6 min |
+| Open PRs, merges per period | GitHub search API | 5 / 10 min |
+| Stars, latest release | GitHub REST API | 10 / 30 min |
+| Games by stage | `https://alxcbtw.github.io/anyps5-roadmap/` (`roadmap.json`, `feed.json`) | 3 h / 30 min |
 
-The dashboard keeps one snapshot of every library per day in the `dashboard-data` volume. Comparing snapshots is what finds new libraries, newly discovered exports and the day's biggest gains, so those panels fill in after the first 24 hours. History-based events (export waves, big jumps, milestones) are there from the first minute.
+The dashboard keeps one snapshot of every library per day in the `dashboard-data` volume. Comparing snapshots is what finds new libraries, newly discovered exports and completed libraries as they happen. History-based events (export waves, big jumps, milestones) are there from the first minute.
 
 The browser page refreshes its data every 15 seconds and reloads itself every 6 hours; Chromium is restarted every 24 hours to keep memory flat.
 
@@ -110,7 +107,7 @@ The browser page refreshes its data every 15 seconds and reloads itself every 6 
 - **YouTube says "No data"**: check the stream key, that outbound port 1935 is open, and `docker compose logs streamer` for ffmpeg errors.
 - **Black or frozen picture**: `docker compose exec streamer cat /tmp/chromium.log`. The compose file gives the streamer 1 GB of shared memory, which Chromium needs.
 - **High CPU**: lower `FPS` to 15 or use `PRESET=superfast`; the screen is mostly static, so quality holds up well.
-- **Panels show "—" or an amber source**: the source is slow or rate-limited. Add a `GITHUB_TOKEN`, or wait for the next refresh; the last good data stays on screen.
+- **Panels show "—"**: a source is slow or rate-limited. `curl -s http://127.0.0.1:8080/api/state` lists every source with its last success and error under `sources`. Add a `GITHUB_TOKEN`, or wait for the next refresh; the last good data stays on screen.
 
 ## Develop locally
 

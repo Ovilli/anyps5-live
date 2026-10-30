@@ -1,5 +1,6 @@
 export interface LibSummary {
   name: string;
+  label: string;
   done: number;
   total: number;
 }
@@ -30,26 +31,6 @@ export interface MergedPr {
   avatar: string;
   mergedAt: string;
   added: number | null;
-}
-
-export interface Commit {
-  sha: string;
-  message: string;
-  author: string;
-  date: string;
-}
-
-export interface CiRun {
-  workflow: string;
-  status: string;
-  conclusion: string | null;
-  updatedAt: string;
-}
-
-export interface Contributor {
-  login: string;
-  avatar: string;
-  merged: number;
 }
 
 export interface Snapshot {
@@ -83,22 +64,16 @@ export interface State {
     started: number;
     untouched: number;
     biggest: LibSummary[];
+    all: LibSummary[];
     movers: { name: string; gained: number; done: number; total: number }[];
     moversSince: string | null;
   } | null;
   github: {
     stars: number;
-    forks: number;
-    watchers: number;
     openPrs: number | null;
-    openIssues: number | null;
     merged24h: number | null;
     merged7d: number | null;
     mergedPrs: MergedPr[];
-    commits: Commit[];
-    ci: CiRun[];
-    contributors: Contributor[];
-    contributorsWindow: number;
     release: { tag: string; publishedAt: string | null } | null;
     rateRemaining: number | null;
     authenticated: boolean;

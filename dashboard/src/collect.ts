@@ -1,16 +1,15 @@
 import { gameEvents, historyEvents, snapshotEvents, describeGameChange } from "./events.js";
 import { GitHub, getJson } from "./http.js";
 import type { Store } from "./store.js";
-import type { CiRun, Commit, Contributor, HistoryPoint, LiveEvent, MergedPr, Snapshot, State } from "./types.js";
+import type { HistoryPoint, LiveEvent, MergedPr, Snapshot, State } from "./types.js";
 
 const REPO = process.env.ANYPS5_REPO ?? "boykopovar/AnyPS5";
 const PAGES = (process.env.ANYPS5_PAGES ?? "https://boykopovar.github.io/AnyPS5").replace(/\/$/, "");
 const ROADMAP = (process.env.ROADMAP_URL ?? "https://alxcbtw.github.io/anyps5-roadmap").replace(/\/$/, "");
 const MINUTE = 60_000;
-const CI_ORDER = ["Build", "Sanitizers", "Windows MSYS2", "Web tests", "Conventions", "Pages progress", "Pages", "Release"];
 
 interface ProgressJson {
-  libraries: { done: number; total: number; percent: number; groups: { name: string; done: number; todo: number }[] };
+  libraries: { done: number; total: number; percent: number; groups: { name: string; label?: string; done: number; todo: number }[] };
   shaders: { done: number; total: number; percent: number };
 }
 
@@ -26,16 +25,6 @@ interface PullJson {
   title: string;
   merged_at: string | null;
   user: { login: string; avatar_url: string };
-}
-
-interface CommitJson {
-  sha: string;
-  commit: { message: string; author: { name: string; date: string } };
-  author: { login: string } | null;
-}
-
-interface RunsJson {
-  workflow_runs: { name: string; status: string; conclusion: string | null; updated_at: string }[];
 }
 
 interface RoadmapJson {
@@ -100,17 +89,10 @@ export class Collector {
   private ensureGithub(): NonNullable<State["github"]> {
     this.state.github ??= {
       stars: 0,
-      forks: 0,
-      watchers: 0,
       openPrs: null,
-      openIssues: null,
       merged24h: null,
       merged7d: null,
       mergedPrs: [],
-      commits: [],
-      ci: [],
-      contributors: [],
-      contributorsWindow: 0,
       release: null,
       rateRemaining: null,
       authenticated: this.github.authenticated,
@@ -160,7 +142,7 @@ export class Collector {
     await this.run("progress", async () => {
       const progress = await getJson<ProgressJson>(`${PAGES}/progress.json?${Date.now()}`);
       this.current = progress;
-      const groups = progress.libraries.groups.map((group) => ({ name: group.name, done: group.done, total: group.done + group.todo }));
+      const groups = progress.libraries.groups.map((group) => ({ name: group.name, label: group.label ?? group.name, done: group.done, total: group.done + group.todo }));
       const snapshot: Snapshot = { date: today(), libraries: Object.fromEntries(groups.map((group) => [group.name, [group.done, group.total]])) };
 
       const snapshots = this.store.data.snapshots;
@@ -186,6 +168,7 @@ export class Collector {
         started: groups.filter((group) => group.done > 0 && group.done < group.total).length,
         untouched: groups.filter((group) => group.done === 0).length,
         biggest: [...groups].sort((a, b) => b.total - a.total).slice(0, 10),
+        all: groups.filter((group) => group.total > 0).sort((a, b) => b.total - a.total),
         movers,
         moversSince: reference?.date ?? null,
       };
@@ -228,34 +211,6 @@ export class Collector {
         mergedAt: pull.merged_at!,
         added: this.store.data.prAdded[pull.number] ?? null,
       }));
-      const counts = new Map<string, Contributor>();
-      for (const pull of merged) {
-        const entry = counts.get(pull.user.login) ?? { login: pull.user.login, avatar: pull.user.avatar_url, merged: 0 };
-        entry.merged += 1;
-        counts.set(pull.user.login, entry);
-      }
-      github.contributors = [...counts.values()].sort((a, b) => b.merged - a.merged).slice(0, 8);
-      github.contributorsWindow = merged.length;
-
-      const commits = await this.github.get<CommitJson[]>(`/repos/${REPO}/commits?sha=main&per_page=20`);
-      github.commits = commits.map<Commit>((commit) => {
-        const lines = commit.commit.message.split("\n").filter((line) => line.trim());
-        const merge = /^Merge pull request #(\d+)/.exec(lines[0] ?? "");
-        return {
-          sha: commit.sha.slice(0, 7),
-          message: merge && lines[1] ? `#${merge[1]} ${lines[1]}` : (lines[0] ?? ""),
-          author: commit.author?.login ?? commit.commit.author.name,
-          date: commit.commit.author.date,
-        };
-      });
-
-      const runs = await this.github.get<RunsJson>(`/repos/${REPO}/actions/runs?branch=main&per_page=60`);
-      const latest = new Map<string, CiRun>();
-      for (const run of runs.workflow_runs) {
-        if (!latest.has(run.name)) latest.set(run.name, { workflow: run.name, status: run.status, conclusion: run.conclusion, updatedAt: run.updated_at });
-      }
-      const rank = (name: string) => (CI_ORDER.includes(name) ? CI_ORDER.indexOf(name) : CI_ORDER.length);
-      github.ci = [...latest.values()].sort((a, b) => rank(a.workflow) - rank(b.workflow) || a.workflow.localeCompare(b.workflow)).slice(0, 8);
       github.rateRemaining = this.github.rateRemaining;
       await this.collectReports(merged.slice(0, 14));
     });
@@ -287,10 +242,8 @@ export class Collector {
   async collectRepository(): Promise<void> {
     await this.run("repo", async () => {
       const github = this.ensureGithub();
-      const repo = await this.github.get<{ stargazers_count: number; forks_count: number; subscribers_count: number }>(`/repos/${REPO}`);
+      const repo = await this.github.get<{ stargazers_count: number }>(`/repos/${REPO}`);
       github.stars = repo.stargazers_count;
-      github.forks = repo.forks_count;
-      github.watchers = repo.subscribers_count;
       try {
         const release = await this.github.get<{ tag_name: string; published_at: string }>(`/repos/${REPO}/releases/latest`);
         github.release = { tag: release.tag_name, publishedAt: release.published_at };
@@ -315,7 +268,6 @@ export class Collector {
         (await this.github.get<{ total_count: number }>(`/search/issues?per_page=1&q=${encodeURIComponent(`repo:${REPO} ${query}`)}`)).total_count;
       const since = new Date(Date.now() - 86_400_000).toISOString().slice(0, 19) + "Z";
       github.openPrs = await count("is:pr is:open");
-      github.openIssues = await count("is:issue is:open");
       github.merged24h = await count(`is:pr is:merged merged:>=${since}`);
       github.merged7d = await count(`is:pr is:merged merged:>=${daysAgo(7)}`);
     });
