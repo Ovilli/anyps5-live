@@ -108,7 +108,10 @@ function renderPrs(github) {
     .slice(0, 6)
     .map((pr) => {
       const fresh = known.size && !known.has(String(pr.number)) ? " fresh" : "";
-      const pill = pr.added > 0 ? `<span class="pill">+${fmt(pr.added)} function${pr.added > 1 ? "s" : ""}</span>` : "";
+      const implemented = pr.report?.implemented ?? 0, declared = pr.report?.declared ?? 0;
+      const pill = implemented > 0
+        ? `<span class="pill">+${fmt(implemented)} function${implemented > 1 ? "s" : ""}</span>`
+        : declared > 0 ? `<span class="pill declared">+${fmt(declared)} declared</span>` : "";
       return `<li class="pr${fresh}" data-number="${pr.number}"><img class="avatar" src="${avatar(pr.avatar, 88)}" alt=""><div class="pr-text"><div class="pr-title">${escape(pr.title)}</div><div class="pr-meta">#${pr.number} · ${escape(pr.author)} · ${ago(pr.mergedAt)}</div></div>${pill}</li>`;
     })
     .join("");

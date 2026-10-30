@@ -24,13 +24,18 @@ export interface LiveEvent {
   detail?: string;
 }
 
+export interface PrReport {
+  implemented: number;
+  declared: number;
+}
+
 export interface MergedPr {
   number: number;
   title: string;
   author: string;
   avatar: string;
   mergedAt: string;
-  added: number | null;
+  report: PrReport | null;
 }
 
 export interface Snapshot {

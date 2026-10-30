@@ -1,15 +1,15 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { LiveEvent, Snapshot } from "./types.js";
+import type { LiveEvent, PrReport, Snapshot } from "./types.js";
 
 export interface Persisted {
   snapshots: Snapshot[];
   events: LiveEvent[];
-  prAdded: Record<string, number | null>;
+  prReports: Record<string, PrReport | null>;
   releaseTag: string | null;
 }
 
-const empty = (): Persisted => ({ snapshots: [], events: [], prAdded: {}, releaseTag: null });
+const empty = (): Persisted => ({ snapshots: [], events: [], prReports: {}, releaseTag: null });
 
 export class Store {
   private readonly file: string;

@@ -1,7 +1,7 @@
 import { gameEvents, historyEvents, snapshotEvents, describeGameChange } from "./events.js";
 import { GitHub, getJson } from "./http.js";
 import type { Store } from "./store.js";
-import type { HistoryPoint, LiveEvent, MergedPr, Snapshot, State } from "./types.js";
+import type { HistoryPoint, LiveEvent, MergedPr, PrReport, Snapshot, State } from "./types.js";
 
 const REPO = process.env.ANYPS5_REPO ?? "boykopovar/AnyPS5";
 const PAGES = (process.env.ANYPS5_PAGES ?? "https://boykopovar.github.io/AnyPS5").replace(/\/$/, "");
@@ -45,6 +45,12 @@ interface FeedJson {
 
 const today = (): string => new Date().toISOString().slice(0, 10);
 const daysAgo = (days: number): string => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+
+// Reads "+6 implemented functions" or "+8 declared functions" from the progress-report bot's summary line.
+function reportCount(body: string, kind: "implemented" | "declared"): number {
+  const match = new RegExp(`([+−-]\\s?\\d[\\d\\s]*) ${kind} functions?`).exec(body);
+  return match ? Number(match[1]!.replace(/[\s+]/g, "").replace("−", "-")) : 0;
+}
 
 export class Collector {
   readonly startedAt = new Date().toISOString();
@@ -209,7 +215,7 @@ export class Collector {
         author: pull.user.login,
         avatar: pull.user.avatar_url,
         mergedAt: pull.merged_at!,
-        added: this.store.data.prAdded[pull.number] ?? null,
+        report: this.store.data.prReports[pull.number] ?? null,
       }));
       github.rateRemaining = this.github.rateRemaining;
       await this.collectReports(merged.slice(0, 14));
@@ -218,24 +224,23 @@ export class Collector {
 
   private async collectReports(merged: PullJson[]): Promise<void> {
     const budget = this.github.authenticated ? 14 : 2;
-    const missing = merged.filter((pull) => !(pull.number in this.store.data.prAdded)).slice(0, budget);
+    const missing = merged.filter((pull) => !(pull.number in this.store.data.prReports)).slice(0, budget);
     for (const pull of missing) {
       if (this.github.rateRemaining !== null && this.github.rateRemaining < 10) break;
       const comments = await this.github.get<{ body: string }[]>(`/repos/${REPO}/issues/${pull.number}/comments?per_page=100`);
-      const report = comments.find((comment) => comment.body.includes("<!-- progress-report -->"));
-      let added: number | null = null;
-      if (report) {
-        const functions = /([+−-]\s?\d[\d\s]*) implemented functions?/.exec(report.body);
-        added = functions ? Number(functions[1]!.replace(/[\s+]/g, "").replace("−", "-")) : 0;
+      const comment = comments.find((item) => item.body.includes("<!-- progress-report -->"));
+      let report: PrReport | null = null;
+      if (comment) {
+        report = { implemented: reportCount(comment.body, "implemented"), declared: reportCount(comment.body, "declared") };
       } else if (Date.now() - Date.parse(pull.merged_at!) < 2 * 60 * MINUTE) {
         continue;
       }
-      this.store.data.prAdded[pull.number] = added;
+      this.store.data.prReports[pull.number] = report;
     }
-    const keys = Object.keys(this.store.data.prAdded).map(Number).sort((a, b) => b - a);
-    for (const key of keys.slice(400)) delete this.store.data.prAdded[key];
+    const keys = Object.keys(this.store.data.prReports).map(Number).sort((a, b) => b - a);
+    for (const key of keys.slice(400)) delete this.store.data.prReports[key];
     const github = this.ensureGithub();
-    for (const pr of github.mergedPrs) pr.added = this.store.data.prAdded[pr.number] ?? null;
+    for (const pr of github.mergedPrs) pr.report = this.store.data.prReports[pr.number] ?? null;
     await this.store.save();
   }
 
