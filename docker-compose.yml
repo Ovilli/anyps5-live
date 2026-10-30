@@ -1,0 +1,37 @@
+name: anyps5-live
+
+services:
+  dashboard:
+    build: ./dashboard
+    restart: unless-stopped
+    environment:
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    volumes:
+      - dashboard-data:/data
+    ports:
+      - "127.0.0.1:${DASHBOARD_PORT:-8080}:8080"
+
+  streamer:
+    build: ./streamer
+    restart: unless-stopped
+    depends_on:
+      dashboard:
+        condition: service_healthy
+    environment:
+      YOUTUBE_STREAM_KEY: ${YOUTUBE_STREAM_KEY:-}
+      YOUTUBE_RTMP_URL: ${YOUTUBE_RTMP_URL:-rtmp://a.rtmp.youtube.com/live2}
+      OUTPUT: ${OUTPUT:-}
+      RECORD_SECONDS: ${RECORD_SECONDS:-}
+      FPS: ${FPS:-30}
+      VIDEO_BITRATE: ${VIDEO_BITRATE:-4500k}
+      BUFSIZE: ${BUFSIZE:-9000k}
+      AUDIO_BITRATE: ${AUDIO_BITRATE:-128k}
+      PRESET: ${PRESET:-veryfast}
+      TZ: ${TZ:-Europe/Paris}
+    shm_size: 1gb
+    volumes:
+      - ./music:/music:ro
+      - ./recordings:/recordings
+
+volumes:
+  dashboard-data:

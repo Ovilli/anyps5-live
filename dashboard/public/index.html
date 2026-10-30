@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1920, height=1080">
+  <title>AnyPS5 live</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="screen">
+    <header class="top">
+      <div class="brand">
+        <span class="live"><span class="live-dot"></span>LIVE</span>
+        <div>
+          <h1>AnyPS5 <span class="thin">· live progress monitor</span></h1>
+          <p class="sub">github.com/boykopovar/AnyPS5 · a relinker that turns PS5 games into native Windows and Linux programs</p>
+        </div>
+      </div>
+      <div class="status">
+        <div class="sources" id="sources"></div>
+        <div class="clocks">
+          <div class="clock"><span class="clock-label">UTC</span><span id="clock-utc">--:--:--</span></div>
+          <div class="clock small"><span class="clock-label">Paris</span><span id="clock-paris">--:--</span></div>
+        </div>
+      </div>
+    </header>
+
+    <section class="kpis">
+      <article class="tile hero">
+        <div class="tile-label">System libraries implemented</div>
+        <div class="hero-row">
+          <div class="hero-value" id="hero-percent">—</div>
+          <div class="hero-side">
+            <div class="hero-count" id="hero-count">— / — functions</div>
+            <div class="hero-delta" id="hero-delta">&nbsp;</div>
+          </div>
+        </div>
+        <div class="meter"><div class="meter-fill" id="hero-meter"></div></div>
+      </article>
+      <article class="tile"><div class="tile-label">GPU shaders</div><div class="tile-value" id="kpi-shaders">—</div><div class="tile-note" id="kpi-shaders-note">RDNA instructions</div></article>
+      <article class="tile"><div class="tile-label">PRs merged · 24h</div><div class="tile-value" id="kpi-merged24">—</div><div class="tile-note" id="kpi-merged7">— in 7 days</div></article>
+      <article class="tile"><div class="tile-label">Open PRs</div><div class="tile-value" id="kpi-open-prs">—</div><div class="tile-note">awaiting review</div></article>
+      <article class="tile"><div class="tile-label">Open issues</div><div class="tile-value" id="kpi-issues">—</div><div class="tile-note">bugs and blockers</div></article>
+      <article class="tile"><div class="tile-label">Playable games</div><div class="tile-value" id="kpi-playable">—</div><div class="tile-note" id="kpi-menus">— reach menus</div></article>
+      <article class="tile"><div class="tile-label">GitHub stars</div><div class="tile-value" id="kpi-stars">—</div><div class="tile-note" id="kpi-forks">— forks</div></article>
+      <article class="tile"><div class="tile-label">Latest release</div><div class="tile-value" id="kpi-release">—</div><div class="tile-note" id="kpi-release-date">&nbsp;</div></article>
+    </section>
+
+    <section class="main">
+      <article class="panel chart-panel">
+        <header class="panel-head">
+          <h2>Functions over time</h2>
+          <div class="legend">
+            <span class="legend-item"><span class="swatch blue"></span>Implemented</span>
+            <span class="legend-item"><span class="swatch orange"></span>Declared (total)</span>
+            <span class="legend-item"><span class="marker-swatch"></span>Exports discovered</span>
+          </div>
+        </header>
+        <svg id="chart" viewBox="0 0 728 372" role="img" aria-label="Implemented and declared functions over time"></svg>
+      </article>
+
+      <article class="panel libs-panel">
+        <header class="panel-head"><h2>Libraries</h2><span class="panel-meta" id="libs-meta"></span></header>
+        <div class="libs-split" id="libs-split"></div>
+        <div class="libs-legend" id="libs-legend"></div>
+        <h3 class="subhead" id="movers-title">Gains since yesterday</h3>
+        <div class="movers" id="movers"></div>
+        <h3 class="subhead">Largest libraries</h3>
+        <div class="biggest" id="biggest"></div>
+      </article>
+
+      <article class="panel prs-panel">
+        <header class="panel-head"><h2>Latest merged PRs</h2><span class="panel-meta" id="prs-meta"></span></header>
+        <ol class="prs" id="prs"></ol>
+      </article>
+    </section>
+
+    <section class="bottom">
+      <article class="panel events-panel">
+        <header class="panel-head"><h2>Major changes &amp; discoveries</h2></header>
+        <ol class="events" id="events"></ol>
+      </article>
+
+      <article class="panel games-panel">
+        <header class="panel-head"><h2>Games by stage</h2><span class="panel-meta" id="games-meta"></span></header>
+        <div class="games-kpis" id="games-kpis"></div>
+        <div class="stages" id="stages"></div>
+        <div class="game-change" id="game-change"></div>
+      </article>
+
+      <article class="panel ci-panel">
+        <header class="panel-head"><h2>CI on main</h2><span class="panel-meta" id="ci-meta"></span></header>
+        <div class="ci" id="ci"></div>
+        <h3 class="subhead">Latest commits</h3>
+        <ol class="commits" id="commits"></ol>
+      </article>
+
+      <article class="panel people-panel">
+        <header class="panel-head"><h2>Top contributors</h2><span class="panel-meta" id="people-meta"></span></header>
+        <ol class="people" id="people"></ol>
+      </article>
+    </section>
+
+    <footer class="ticker">
+      <span class="ticker-label">LIVE FEED</span>
+      <div class="ticker-window"><div class="ticker-track" id="ticker"></div></div>
+    </footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

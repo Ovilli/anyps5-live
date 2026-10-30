@@ -1,0 +1,7 @@
+.env
+node_modules/
+dashboard/dist/
+dashboard/data/
+recordings/
+music/*
+!music/.gitkeep

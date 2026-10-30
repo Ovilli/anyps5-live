@@ -1,0 +1,20 @@
+{
+  "name": "anyps5-live-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Collects AnyPS5 progress, GitHub activity and game status, and serves the 1920x1080 live monitoring screen.",
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "dev": "tsc -p tsconfig.json && node dist/server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}
