@@ -62,6 +62,20 @@ The browser page refreshes its data every 15 seconds and reloads itself every 6 
 
    The streamer waits for the dashboard's health check, starts the browser, then begins streaming. YouTube shows the preview within a minute.
 
+### Single container
+
+Some platforms build one Dockerfile and run one service (Coolify, Dokku, a self-hosted hub that deploys a GitHub repository on every push). For those, the `Dockerfile` at the root of the repository builds an image that runs the dashboard and the streamer together:
+
+- Dockerfile: `Dockerfile`, build context: the repository root.
+- Environment: `YOUTUBE_STREAM_KEY`, and optionally `GITHUB_TOKEN` and the encoder settings below. Without a stream key, the container only serves the dashboard.
+- Port: the dashboard listens on `3000` (change it with `PORT`). Expose it only if you want to see the screen in a browser; the stream does not need it.
+- Persistent data: mount a volume on `/data` to keep the daily snapshots across redeploys.
+
+```bash
+docker build -t anyps5-live .
+docker run -d --restart unless-stopped -e YOUTUBE_STREAM_KEY=... -v anyps5-data:/data anyps5-live
+```
+
 ## Preview and test without going live
 
 - **See the dashboard** from your computer through an SSH tunnel:
@@ -110,6 +124,7 @@ docker compose run --rm --entrypoint chromium streamer --headless=new --no-sandb
 | `RECORD_SECONDS` | | Stop after this many seconds (for tests) |
 | `GITHUB_TOKEN` | | Read-only GitHub token |
 | `FPS` / `VIDEO_BITRATE` / `BUFSIZE` / `PRESET` | `30` / `4500k` / `9000k` / `veryfast` | Encoder settings |
+| `PORT` | `8080` (`3000` in the single-container image) | Dashboard port |
 | `ANYPS5_REPO` | `boykopovar/AnyPS5` | Repository to follow (dashboard) |
 | `ANYPS5_PAGES` | `https://boykopovar.github.io/AnyPS5` | Where `progress.json` and `history.json` are published |
 | `ROADMAP_URL` | `https://alxcbtw.github.io/anyps5-roadmap` | Game roadmap |
