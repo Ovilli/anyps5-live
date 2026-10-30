@@ -70,14 +70,15 @@ encode() {
     -thread_queue_size 512 -f x11grab -draw_mouse 0 -framerate "$FPS" -video_size "${WIDTH}x${HEIGHT}" -i "${DISPLAY}.0" \
     "${audio[@]}" \
     -map 0:v -map 1:a \
-    -c:v libx264 -preset "$PRESET" -pix_fmt yuv420p \
-    -b:v "$VIDEO_BITRATE" -maxrate "$VIDEO_BITRATE" -bufsize "$BUFSIZE" \
+    -vf "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p" \
+    -colorspace bt709 -color_primaries bt709 -color_trc bt709 \
+    -c:v libx264 -preset "$PRESET" -crf "$CRF" -maxrate "$VIDEO_BITRATE" -bufsize "$BUFSIZE" \
     -g "$gop" -keyint_min "$gop" -sc_threshold 0 \
     -c:a aac -b:a "$AUDIO_BITRATE" -ar 44100 -ac 2 \
     "${duration[@]}" -f "$FORMAT" "$OUTPUT"
 }
 
-log "Streaming ${WIDTH}x${HEIGHT} (page scale ${SCALE}) at ${FPS} fps, ${VIDEO_BITRATE} to ${TARGET}"
+log "Streaming ${WIDTH}x${HEIGHT} (page scale ${SCALE}) at ${FPS} fps, CRF ${CRF} up to ${VIDEO_BITRATE}, to ${TARGET}"
 if [ ${#duration[@]} -gt 0 ]; then
   encode
   log "Recording finished: ${OUTPUT}"

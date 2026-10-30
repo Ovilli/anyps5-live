@@ -24,7 +24,8 @@ services:
       RECORD_SECONDS: ${RECORD_SECONDS:-}
       WIDTH: ${WIDTH:-2560}
       HEIGHT: ${HEIGHT:-1440}
-      FPS: ${FPS:-30}
+      FPS: ${FPS:-5}
+      CRF: ${CRF:-18}
       VIDEO_BITRATE: ${VIDEO_BITRATE:-12000k}
       BUFSIZE: ${BUFSIZE:-24000k}
       AUDIO_BITRATE: ${AUDIO_BITRATE:-128k}

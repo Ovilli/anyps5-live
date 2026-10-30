@@ -67,7 +67,7 @@ h1 .thin { font-weight: 400; color: var(--muted); }
 .hero-delta { font-size: 19px; color: var(--ink-2); margin-top: 6px; white-space: nowrap; }
 .up { color: var(--good); font-weight: 700; }
 .meter { height: 8px; border-radius: 4px; background: var(--grid); overflow: hidden; }
-.meter-fill { height: 100%; width: 0; border-radius: 4px; background: var(--series-1); transition: width 1.2s ease; }
+.meter-fill { height: 100%; width: 0; border-radius: 4px; background: var(--series-1); }
 
 /* Panels */
 .main { display: grid; grid-template-columns: 1180px 1fr; gap: 16px; min-height: 0; }
