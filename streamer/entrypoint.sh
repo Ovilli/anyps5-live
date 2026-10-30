@@ -20,6 +20,9 @@ esac
 log "Waiting for the dashboard at ${DASHBOARD_URL}"
 until curl -fsS "${DASHBOARD_URL%/}/healthz" >/dev/null 2>&1; do sleep 3; done
 
+# The page is laid out at 1920x1080: a larger output renders it sharper instead of scaling the video up.
+SCALE="${SCALE:-$(awk -v w="$WIDTH" 'BEGIN { printf "%.6f", w / 1920 }')}"
+
 export DISPLAY=:99
 Xvfb "$DISPLAY" -screen 0 "${WIDTH}x${HEIGHT}x24" -nolisten tcp -ac >/tmp/xvfb.log 2>&1 &
 for _ in $(seq 1 50); do xdpyinfo >/dev/null 2>&1 && break; sleep 0.2; done
@@ -29,7 +32,7 @@ run_browser() {
     rm -rf /tmp/chromium
     chromium \
       --no-sandbox --no-first-run --noerrdialogs --disable-infobars --kiosk \
-      --window-position=0,0 --window-size="${WIDTH},${HEIGHT}" --force-device-scale-factor=1 \
+      --window-position=0,0 --window-size="${WIDTH},${HEIGHT}" --force-device-scale-factor="$SCALE" \
       --hide-scrollbars --disable-translate --disable-features=Translate,MediaRouter \
       --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows \
       --disable-dev-shm-usage --user-data-dir=/tmp/chromium \
@@ -74,7 +77,7 @@ encode() {
     "${duration[@]}" -f "$FORMAT" "$OUTPUT"
 }
 
-log "Streaming ${WIDTH}x${HEIGHT} at ${FPS} fps, ${VIDEO_BITRATE} to ${TARGET}"
+log "Streaming ${WIDTH}x${HEIGHT} (page scale ${SCALE}) at ${FPS} fps, ${VIDEO_BITRATE} to ${TARGET}"
 if [ ${#duration[@]} -gt 0 ]; then
   encode
   log "Recording finished: ${OUTPUT}"

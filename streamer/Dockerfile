@@ -16,11 +16,11 @@ RUN chmod 0755 /usr/local/bin/entrypoint.sh
 
 USER streamer
 ENV DASHBOARD_URL=http://dashboard:8080/ \
-    WIDTH=1920 \
-    HEIGHT=1080 \
+    WIDTH=2560 \
+    HEIGHT=1440 \
     FPS=30 \
-    VIDEO_BITRATE=4500k \
-    BUFSIZE=9000k \
+    VIDEO_BITRATE=12000k \
+    BUFSIZE=24000k \
     AUDIO_BITRATE=128k \
     PRESET=veryfast \
     BROWSER_RESTART_HOURS=24

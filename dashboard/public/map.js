@@ -52,8 +52,9 @@ function cells(count, x, y, w, h) {
 function drawLibraryMap(canvas, groups, options = {}) {
   const width = canvas.clientWidth, height = canvas.clientHeight;
   if (!width || !height || !groups.length) return;
-  canvas.width = width;
-  canvas.height = height;
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = Math.round(width * ratio);
+  canvas.height = Math.round(height * ratio);
   const style = getComputedStyle(document.documentElement);
   const colors = {
     surface: options.background ?? style.getPropertyValue("--surface").trim(),
@@ -62,6 +63,7 @@ function drawLibraryMap(canvas, groups, options = {}) {
     ink: style.getPropertyValue("--ink").trim(),
   };
   const context = canvas.getContext("2d");
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
   context.fillStyle = colors.surface;
   context.fillRect(0, 0, width, height);
   const rects = squarify(groups.map((group) => group.total), 0, 0, width, height);
