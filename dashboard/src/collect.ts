@@ -105,7 +105,7 @@ export class Collector {
     const seen = new Set<string>();
     this.state.events = [...this.store.data.events, ...computed]
       .filter((event) => {
-        const key = `${event.kind}|${event.title}`;
+        const key = `${event.kind}|${event.title}|${event.time.slice(0, 10)}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;

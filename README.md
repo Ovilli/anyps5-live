@@ -88,6 +88,14 @@ The browser page refreshes its data every 15 seconds and reloads itself every 6 
 
 **Soundtrack**: YouTube requires an audio track, so the streamer sends silence by default. Put `.mp3`, `.m4a`, `.ogg`, `.flac` or `.wav` files in `./music` to loop them instead; use only music you have the rights to stream.
 
+## Thumbnail
+
+`thumbnail.png` (1280×720) is ready to upload as the stream's thumbnail. To regenerate it with the current library map while the dashboard runs:
+
+```bash
+docker compose run --rm --entrypoint chromium streamer --headless=new --no-sandbox --disable-gpu   --hide-scrollbars --window-size=1280,720 --virtual-time-budget=20000   --screenshot=/recordings/thumbnail.png http://dashboard:8080/thumbnail.html
+```
+
 ## Configuration
 
 | Variable | Default | Purpose |

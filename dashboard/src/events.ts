@@ -42,7 +42,7 @@ export function historyEvents(points: HistoryPoint[]): LiveEvent[] {
         time,
         kind: "percent",
         title: widened
-          ? `Completion rate ${signed(movedPercent, 2)} pts as the total widened (now ${point.percent.toFixed(2)}%)`
+          ? `Completion rate ${signed(movedPercent, 2)} pts (total widened)`
           : `Completion rate ${signed(movedPercent, 2)} pts (now ${point.percent.toFixed(2)}%)`,
         detail: widened
           ? "Mechanical drop: the total widened, no function was lost."

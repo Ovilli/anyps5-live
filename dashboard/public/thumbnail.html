@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1280, height=720">
+  <title>AnyPS5 live thumbnail</title>
+  <style>
+    :root {
+      --page: #0d0d0d;
+      --ink: #f0efec;
+      --ink-2: #c3c2b7;
+      --series-1: #3987e5;
+      --todo: #3d3d3a;
+      --critical: #d03b3b;
+    }
+    html, body {
+      margin: 0;
+      width: 1280px;
+      height: 720px;
+      overflow: hidden;
+      background: var(--page);
+      color: var(--ink);
+      font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    #map { position: absolute; top: 0; right: 0; width: 840px; height: 720px; display: block; }
+    .fade {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, var(--page) 33%, rgba(13, 13, 13, 0.82) 47%, rgba(13, 13, 13, 0.15) 74%, rgba(13, 13, 13, 0) 100%);
+    }
+    .text {
+      position: absolute;
+      left: 68px;
+      top: 0;
+      bottom: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    .live {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--critical);
+      color: #fff;
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      padding: 10px 20px 10px 16px;
+      border-radius: 10px;
+    }
+    .live i { width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+    h1 { margin: 22px 0 0; font-size: 178px; font-weight: 900; letter-spacing: -0.045em; line-height: 0.88; }
+    .route { margin-top: 18px; font-size: 84px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
+    .route span { color: var(--series-1); }
+    .tag { margin-top: 18px; font-size: 38px; font-weight: 600; color: var(--ink-2); }
+  </style>
+</head>
+<body>
+  <canvas id="map"></canvas>
+  <div class="fade"></div>
+  <div class="text">
+    <div class="live"><i></i>LIVE 24/7</div>
+    <h1>AnyPS5</h1>
+    <div class="route">PS5 <span>→</span> PC</div>
+    <div class="tag">progress tracker</div>
+  </div>
+  <script src="map.js"></script>
+  <script>
+    fetch("/api/state", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((state) => {
+        if (state.libraries) drawLibraryMap(document.getElementById("map"), state.libraries.all, { labels: false, background: "#0d0d0d" });
+        document.body.dataset.ready = "true";
+      });
+  </script>
+</body>
+</html>

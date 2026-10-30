@@ -35,9 +35,10 @@ export class Store {
   }
 
   addEvents(events: LiveEvent[]): void {
-    const known = new Set(this.data.events.map((event) => `${event.kind}|${event.title}`));
+    const keyOf = (event: LiveEvent) => `${event.kind}|${event.title}|${event.time.slice(0, 10)}`;
+    const known = new Set(this.data.events.map(keyOf));
     for (const event of events) {
-      const key = `${event.kind}|${event.title}`;
+      const key = keyOf(event);
       if (!known.has(key)) {
         this.data.events.push(event);
         known.add(key);
