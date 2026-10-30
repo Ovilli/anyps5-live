@@ -2,6 +2,10 @@
 
 A 24/7 YouTube live stream that shows the progress of [AnyPS5](https://github.com/boykopovar/AnyPS5) as a monitoring screen. Everything runs in Docker on a VPS: one container collects the data and serves a 1920×1080 dashboard, the other renders it in a headless browser and streams it to YouTube.
 
+![The live screen](thumbnail.png)
+
+An unofficial community project: it is not affiliated with the AnyPS5 maintainers or with Sony, and it only reads AnyPS5's public data.
+
 ## What is on screen
 
 - **Key figures**: system libraries implemented (percentage, functions done / declared, gains over 24 hours and 7 days), PRs merged today and this week, open PRs, playable games, GitHub stars and the latest release.
@@ -124,3 +128,7 @@ cd dashboard
 npm install
 npm run dev          # http://localhost:8080, data kept in dashboard/data
 ```
+
+## License
+
+[MIT](LICENSE)
