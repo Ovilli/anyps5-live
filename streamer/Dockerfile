@@ -18,12 +18,12 @@ USER streamer
 ENV DASHBOARD_URL=http://dashboard:8080/ \
     WIDTH=2560 \
     HEIGHT=1440 \
-    FPS=5 \
-    CRF=18 \
+    FPS=30 \
+    CAPTURE_FPS=10 \
     VIDEO_BITRATE=12000k \
     BUFSIZE=24000k \
     AUDIO_BITRATE=128k \
-    PRESET=veryfast \
+    PRESET=superfast \
     BROWSER_RESTART_HOURS=24
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]

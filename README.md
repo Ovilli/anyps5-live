@@ -43,8 +43,8 @@ The browser page refreshes its data every 15 seconds and reloads itself every 6 
 ## Requirements
 
 - A VPS with Docker Engine and the Compose plugin.
-- About 1 vCPU and 2 GB of RAM for the default 1440p at 5 fps (`PRESET=veryfast`).
-- Outbound TCP 1935 (RTMP) and up to 13 Mbit/s of upload (about 3 Mbit/s on average).
+- About 2.5 vCPU and 2 GB of RAM for the default 1440p at 30 fps (`PRESET=superfast`).
+- Outbound TCP 1935 (RTMP) and about 13 Mbit/s of upload.
 
 ## Set up
 
@@ -124,8 +124,8 @@ docker compose run --rm --entrypoint chromium streamer --headless=new --no-sandb
 | `RECORD_SECONDS` | | Stop after this many seconds (for tests) |
 | `GITHUB_TOKEN` | | Read-only GitHub token |
 | `WIDTH` / `HEIGHT` | `2560` / `1440` | Output resolution. The 1920×1080 page is rendered at this size rather than scaled up, so it stays sharp |
-| `FPS` | `5` | Frame rate. The screen only changes when data arrives, and the encoder spends the same effort on an unchanged frame as on a new one, so 5 fps looks like 30 at a sixth of the CPU |
-| `CRF` / `VIDEO_BITRATE` / `BUFSIZE` / `PRESET` | `18` / `12000k` / `24000k` / `veryfast` | Encoder settings: constant quality, capped at `VIDEO_BITRATE` |
+| `FPS` / `CAPTURE_FPS` | `30` / `10` | Output and capture frame rates. YouTube needs a steady 30 fps at a constant bitrate; the mostly static screen is captured at 10 fps and each frame repeated, which skips the colour conversion of the repeats |
+| `VIDEO_BITRATE` / `BUFSIZE` / `PRESET` | `12000k` / `24000k` / `superfast` | Encoder settings, constant bitrate |
 | `PORT` | `8080` (`3000` in the single-container image) | Dashboard port |
 | `ANYPS5_REPO` | `boykopovar/AnyPS5` | Repository to follow (dashboard) |
 | `ANYPS5_PAGES` | `https://boykopovar.github.io/AnyPS5` | Where `progress.json` and `history.json` are published |
@@ -136,7 +136,8 @@ docker compose run --rm --entrypoint chromium streamer --headless=new --no-sandb
 - **YouTube says "No data"**: check the stream key, that outbound port 1935 is open, and `docker compose logs streamer` for ffmpeg errors.
 - **Black or frozen picture**: `docker compose exec streamer cat /tmp/chromium.log`. The compose file gives the streamer 1 GB of shared memory, which Chromium needs.
 - **Blurry on YouTube**: YouTube re-encodes every stream. From a 1080p input it serves low-bitrate H.264, which smears the library map's thousands of cells; from 1440p it serves sharper VP9 encodes at every quality, 1080p included. Keep the default 1440p, and keep the stream latency on *Normal*.
-- **High CPU**: the encoder's cost is proportional to `FPS` (about 0.12 vCPU per frame per second at 1440p with `veryfast`). Lower it, or use `PRESET=superfast`.
+- **High CPU**: the encoder works on every output frame, repeated or not. Use `PRESET=ultrafast`, or stream 1080p (`WIDTH=1920 HEIGHT=1080 VIDEO_BITRATE=6000k`).
+- **YouTube: "not receiving enough video"**: keep `FPS=30` and the constant bitrate; YouTube's ingest does not accept a very low frame rate or a mostly empty bitrate.
 - **Panels show "—"**: a source is slow or rate-limited. `curl -s http://127.0.0.1:8080/api/state` lists every source with its last success and error under `sources`. Add a `GITHUB_TOKEN`, or wait for the next refresh; the last good data stays on screen.
 
 ## Develop locally

@@ -31,12 +31,12 @@ ENV NODE_ENV=production \
     PORT=3000 \
     WIDTH=2560 \
     HEIGHT=1440 \
-    FPS=5 \
-    CRF=18 \
+    FPS=30 \
+    CAPTURE_FPS=10 \
     VIDEO_BITRATE=12000k \
     BUFSIZE=24000k \
     AUDIO_BITRATE=128k \
-    PRESET=veryfast \
+    PRESET=superfast \
     BROWSER_RESTART_HOURS=24
 
 VOLUME /data

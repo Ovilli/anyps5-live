@@ -74,18 +74,18 @@ gop=$(( FPS * 2 ))
 
 encode() {
   ffmpeg -hide_banner -loglevel warning -nostats -y \
-    -thread_queue_size 512 -f x11grab -draw_mouse 0 -framerate "$FPS" -video_size "${WIDTH}x${HEIGHT}" -i "${DISPLAY}.0" \
+    -thread_queue_size 512 -f x11grab -draw_mouse 0 -framerate "$CAPTURE_FPS" -video_size "${WIDTH}x${HEIGHT}" -i "${DISPLAY}.0" \
     "${audio[@]}" \
     -map 0:v -map 1:a \
-    -vf "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p" \
+    -vf "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p,fps=$FPS" \
     -colorspace bt709 -color_primaries bt709 -color_trc bt709 \
-    -c:v libx264 -preset "$PRESET" -crf "$CRF" -maxrate "$VIDEO_BITRATE" -bufsize "$BUFSIZE" \
+    -c:v libx264 -preset "$PRESET" -b:v "$VIDEO_BITRATE" -maxrate "$VIDEO_BITRATE" -bufsize "$BUFSIZE" -x264-params nal-hrd=cbr \
     -g "$gop" -keyint_min "$gop" -sc_threshold 0 \
     -c:a aac -b:a "$AUDIO_BITRATE" -ar 44100 -ac 2 \
     "${duration[@]}" -f "$FORMAT" "$OUTPUT"
 }
 
-log "Streaming ${WIDTH}x${HEIGHT} (page scale ${SCALE}) at ${FPS} fps, CRF ${CRF} up to ${VIDEO_BITRATE}, to ${TARGET}"
+log "Streaming ${WIDTH}x${HEIGHT} (page scale ${SCALE}) at ${FPS} fps captured at ${CAPTURE_FPS}, ${VIDEO_BITRATE} CBR, to ${TARGET}"
 if [ ${#duration[@]} -gt 0 ]; then
   encode
   log "Recording finished: ${OUTPUT}"
