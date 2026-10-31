@@ -24,8 +24,15 @@ until curl -fsS "${DASHBOARD_URL%/}/healthz" >/dev/null 2>&1; do sleep 3; done
 SCALE="${SCALE:-$(awk -v w="$WIDTH" 'BEGIN { printf "%.6f", w / 1920 }')}"
 
 export DISPLAY=:99
+# A restarted container keeps /tmp: without this, the previous X server's lock stops Xvfb from starting.
+rm -f "/tmp/.X${DISPLAY#:}-lock" "/tmp/.X11-unix/X${DISPLAY#:}"
 Xvfb "$DISPLAY" -screen 0 "${WIDTH}x${HEIGHT}x24" -nolisten tcp -ac >/tmp/xvfb.log 2>&1 &
+xvfb=$!
 for _ in $(seq 1 50); do xdpyinfo >/dev/null 2>&1 && break; sleep 0.2; done
+if ! xdpyinfo >/dev/null 2>&1; then
+  log "Xvfb did not start: $(tail -n 3 /tmp/xvfb.log | tr '\n' ' ')"
+  exit 1
+fi
 
 run_browser() {
   while true; do
@@ -86,6 +93,10 @@ if [ ${#duration[@]} -gt 0 ]; then
 fi
 while true; do
   encode || true
+  if ! kill -0 "$xvfb" 2>/dev/null; then
+    log "Xvfb stopped: exiting so the container restarts cleanly"
+    exit 1
+  fi
   log "ffmpeg stopped, reconnecting in 5 s"
   sleep 5
 done

@@ -1,4 +1,4 @@
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,7 +24,15 @@ await store.load();
 const collector = new Collector(store, new GitHub(process.env.GITHUB_TOKEN || undefined));
 collector.start();
 
-const server = createServer(async (request, response) => {
+// Any request error (a malformed URL from a scanner, say) answers 400 instead of crashing the process.
+const server = createServer((request, response) => {
+  handle(request, response).catch(() => {
+    if (!response.headersSent) response.writeHead(400);
+    response.end();
+  });
+});
+
+async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
   const url = new URL(request.url ?? "/", "http://localhost");
   if (url.pathname === "/api/state") {
     response.writeHead(200, { "Content-Type": TYPES[".json"]!, "Cache-Control": "no-store" });
@@ -49,7 +57,7 @@ const server = createServer(async (request, response) => {
   } catch {
     response.writeHead(404).end();
   }
-});
+}
 
 server.listen(PORT, () => console.log(`AnyPS5 live dashboard on http://localhost:${PORT} (GitHub token: ${process.env.GITHUB_TOKEN ? "yes" : "no"})`));
 
