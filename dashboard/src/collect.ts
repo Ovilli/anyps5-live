@@ -1,4 +1,5 @@
-import { CHAT_REMINDER, answerCommand } from "./chat.js";
+import { CHAT_REMINDER, answerCommand, nextChatDelay, quotaDay } from "./chat.js";
+import { openChatStream, type StreamMessage } from "./chatstream.js";
 import { historyEvents, snapshotEvents } from "./events.js";
 import { STAGES, byPopularity, isRockstar, toThread, type DiscussionJson } from "./games.js";
 import { GitHub, getJson } from "./http.js";
@@ -9,20 +10,18 @@ const REPO = process.env.ANYPS5_REPO ?? "boykopovar/AnyPS5";
 const PAGES = (process.env.ANYPS5_PAGES ?? "https://boykopovar.github.io/AnyPS5").replace(/\/$/, "");
 const ROADMAP = (process.env.ROADMAP_URL ?? "https://alxcbtw.github.io/anyps5-roadmap").replace(/\/$/, "");
 const MINUTE = 60_000;
-// Chat commands, off unless CHAT_COMMANDS=1. Each read costs 5 of the API key's 10,000 daily units, on top of
-// the like counter's 1 unit a minute: one read a minute uses 8,640 units a day in all.
+// Chat commands, off unless CHAT_COMMANDS=1. Each opening of the chat stream costs 5 of the API key's 10,000 daily
+// units. With the like counter (720) and the reminder (1,200), CHAT_DAILY_UNITS keeps the day under the limit.
 const CHAT_COMMANDS = process.env.CHAT_COMMANDS === "1";
-const CHAT_POLL_SECONDS = Math.max(30, Number(process.env.CHAT_POLL_SECONDS) || 60);
-const CHAT_COOLDOWN_MS = 60_000;
+const CHAT_POLL_SECONDS = Math.max(30, Number(process.env.CHAT_POLL_SECONDS) || 75);
+const CHAT_BURST_MS = Math.max(0, Number(process.env.CHAT_BURST_MINUTES ?? 3) || 0) * MINUTE;
+const CHAT_DAILY_UNITS = Number(process.env.CHAT_DAILY_UNITS) || 8000;
+const CHAT_STREAM_UNITS = 5;
+const CHAT_COOLDOWN_MS = 30_000;
 // A reminder of the commands, posted as the channel: 50 units each, so one an hour costs 1,200 a day. 0 turns it off.
 const CHAT_REMINDER_MINUTES = Math.max(0, Number(process.env.CHAT_REMINDER_MINUTES ?? 60) || 0);
 const TOKEN_URL = process.env.GOOGLE_TOKEN_URL ?? "https://oauth2.googleapis.com/token";
 const CHAT_ANSWERS_PER_READ = 3;
-
-interface ChatJson {
-  nextPageToken?: string;
-  items: { id: string; snippet: { type: string; displayMessage?: string }; authorDetails: { channelId: string; displayName: string } }[];
-}
 
 interface ProgressJson {
   libraries: { done: number; total: number; percent: number; groups: { name: string; label?: string; done: number; todo: number }[] };
@@ -102,7 +101,7 @@ export class Collector {
   private gameCategory: string | null = null;
   private threads: GameThread[] = [];
   private liveChatId: string | null = null;
-  private chat: { id: string | null; token: string | null; asked: Map<string, number> } = { id: null, token: null, asked: new Map() };
+  private chat: { id: string | null; token: string | null; asked: Map<string, number>; burstUntil: number } = { id: null, token: null, asked: new Map(), burstUntil: 0 };
   readonly state: State = {
     updatedAt: new Date().toISOString(),
     sources: {},
@@ -434,37 +433,58 @@ export class Collector {
     });
   }
 
-  // Reads new chat messages and answers their commands on screen. Nothing is posted back to the chat.
-  async collectChat(): Promise<void> {
-    const key = process.env.YOUTUBE_API_KEY, liveChatId = this.liveChatId;
-    if (!key || !liveChatId) return;
-    await this.run("chat", async () => {
-      if (liveChatId !== this.chat.id) this.chat = { id: liveChatId, token: null, asked: new Map() };
-      const query = new URLSearchParams({ liveChatId, part: "id,snippet,authorDetails", maxResults: "200" });
-      if (this.chat.token) query.set("pageToken", this.chat.token);
-      const response = await fetch(`https://www.googleapis.com/youtube/v3/liveChat/messages?${query}`, {
-        headers: { "X-Goog-Api-Key": key },
-        signal: AbortSignal.timeout(30_000),
-      });
-      if (!response.ok) throw new Error(`YouTube chat ${response.status}`);
-      const body = (await response.json()) as ChatJson;
-      const first = this.chat.token === null;
-      this.chat.token = body.nextPageToken ?? this.chat.token;
-      // The first read returns the recent history: those commands were typed before anyone listened.
-      if (first) return;
-      const now = Date.now();
-      for (const [author, at] of this.chat.asked) if (now - at >= CHAT_COOLDOWN_MS) this.chat.asked.delete(author);
-      const answers: ChatAnswer[] = [];
-      for (const item of body.items) {
-        if (answers.length >= CHAT_ANSWERS_PER_READ) break;
-        if (item.snippet.type !== "textMessageEvent" || this.chat.asked.has(item.authorDetails.channelId)) continue;
-        const answer = answerCommand(item.id, item.snippet.displayMessage ?? "", item.authorDetails.displayName, this.threads, this.state.libraries?.all ?? [], { progress: this.state.progress, topAuthors: this.state.github?.topAuthors ?? [] });
-        if (!answer) continue;
-        this.chat.asked.set(item.authorDetails.channelId, now);
-        answers.push(answer);
-      }
-      this.state.chat.answers = [...this.state.chat.answers, ...answers].slice(-10);
+  private chatUnitsLeft(): number {
+    const day = quotaDay(Date.now());
+    if (this.store.data.chatUnits?.day !== day) this.store.data.chatUnits = { day, units: 0 };
+    return CHAT_DAILY_UNITS - this.store.data.chatUnits.units;
+  }
+
+  // Answers the commands in new chat messages on screen. Nothing is posted back to the chat.
+  private answerMessages(messages: StreamMessage[]): void {
+    const now = Date.now();
+    for (const [author, at] of this.chat.asked) if (now - at >= CHAT_COOLDOWN_MS) this.chat.asked.delete(author);
+    const answers: ChatAnswer[] = [];
+    for (const message of messages) {
+      if (answers.length >= CHAT_ANSWERS_PER_READ) break;
+      if (message.type !== 1 || this.chat.asked.has(message.authorId)) continue;
+      const answer = answerCommand(message.id, message.text, message.author, this.threads, this.state.libraries?.all ?? [], { progress: this.state.progress, topAuthors: this.state.github?.topAuthors ?? [] });
+      if (!answer) continue;
+      this.chat.asked.set(message.authorId, now);
+      answers.push(answer);
+      console.log(`[chat] answered ${message.text.trim().split(/\s/)[0]?.slice(0, 10)} ${((now - Date.parse(message.publishedAt)) / 1000).toFixed(1)} s after it was sent`);
+    }
+    if (!answers.length) return;
+    this.chat.burstUntil = now + CHAT_BURST_MS;
+    this.state.chat.answers = [...this.state.chat.answers, ...answers].slice(-10);
+  }
+
+  // One opening of the chat stream, until YouTube closes it.
+  private async readChatStream(key: string, liveChatId: string): Promise<void> {
+    if (liveChatId !== this.chat.id) this.chat = { id: liveChatId, token: null, asked: new Map(), burstUntil: 0 };
+    this.store.data.chatUnits!.units += CHAT_STREAM_UNITS;
+    // The first batch of a new reading is the recent history: those commands were typed before anyone listened.
+    let skip = this.chat.token === null;
+    await openChatStream(key, liveChatId, this.chat.token, (messages, token) => {
+      if (token) this.chat.token = token;
+      if (!skip) this.answerMessages(messages);
+      skip = false;
     });
+  }
+
+  private async runChat(): Promise<void> {
+    const key = process.env.YOUTUBE_API_KEY;
+    if (!key) return;
+    for (;;) {
+      let wait = nextChatDelay(Date.now(), this.chat.burstUntil, this.chatUnitsLeft(), CHAT_POLL_SECONDS);
+      if (!this.liveChatId) wait = 10_000;
+      else if (this.chatUnitsLeft() > 0) {
+        await this.run("chat", () => this.readChatStream(key, this.liveChatId!));
+        if (!this.state.sources.chat?.ok) this.chat.burstUntil = 0;
+        wait = nextChatDelay(Date.now(), this.chat.burstUntil, this.chatUnitsLeft(), CHAT_POLL_SECONDS);
+        await this.store.save();
+      }
+      await new Promise((resolve) => setTimeout(resolve, wait).unref());
+    }
   }
 
   // Waits a full interval after the first start, and keeps its time across restarts, so a deployment posts nothing.
@@ -519,8 +539,8 @@ export class Collector {
     every(fast ? 5 : 10, () => this.collectCounts());
     every(180, () => this.collectCovers());
     every(10, () => this.collectGames());
-    every(1, () => this.collectYoutube());
-    if (CHAT_COMMANDS) every(CHAT_POLL_SECONDS / 60, () => this.collectChat());
+    every(2, () => this.collectYoutube());
+    if (CHAT_COMMANDS) void this.runChat();
     if (CHAT_COMMANDS && CHAT_REMINDER_MINUTES > 0) every(5, () => this.collectChatReminder());
   }
 }

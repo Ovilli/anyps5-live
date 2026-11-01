@@ -10,9 +10,11 @@ WORKDIR /app
 ENV NODE_ENV=production \
     DATA_DIR=/data \
     PORT=8080
-COPY package.json ./
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
 COPY --from=build /app/dist ./dist
 COPY public ./public
+COPY proto ./proto
 RUN mkdir -p /data && chown node:node /data
 USER node
 VOLUME /data

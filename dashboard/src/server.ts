@@ -56,6 +56,11 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     response.end(JSON.stringify({ ...collector.state, startedAt: collector.startedAt, serverTime: new Date().toISOString() }));
     return;
   }
+  if (url.pathname === "/api/chat") {
+    response.writeHead(200, { "Content-Type": TYPES[".json"]!, "Cache-Control": "no-store" });
+    response.end(JSON.stringify(collector.state.chat));
+    return;
+  }
   if (url.pathname === "/api/short-meta") {
     response.writeHead(200, { "Content-Type": TYPES[".json"]!, "Cache-Control": "no-store" });
     response.end(JSON.stringify(shortMeta()));

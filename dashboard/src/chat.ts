@@ -134,3 +134,14 @@ export function answerCommand(id: string, text: string, author: string, threads:
   if (command === "help" || !normalize(query)) return help(id, kicker);
   return command === "game" ? gameAnswer(id, kicker, query, threads) : libAnswer(id, kicker, query, libraries);
 }
+
+// The API's daily quota resets at midnight in California.
+export const quotaDay = (now: number): string => new Date(now).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+
+// How long to wait before opening the chat stream again. YouTube closes a quiet stream after about 10 seconds and
+// each opening costs 5 units, so staying connected all day would cost about 42,000 of the 10,000 daily units. The
+// stream is reopened at once only for a few minutes after a command, while the day's budget lasts.
+export function nextChatDelay(now: number, burstUntil: number, unitsLeft: number, idleSeconds: number): number {
+  if (unitsLeft <= 0) return 300_000;
+  return now < burstUntil ? 250 : idleSeconds * 1000;
+}

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CHAT_REMINDER, answerCommand } from "../dist/chat.js";
+import { CHAT_REMINDER, answerCommand, nextChatDelay, quotaDay } from "../dist/chat.js";
 
 const thread = (number, name, stage, replies, titleId = null) => ({ number, name, titleId, stage, replies, createdAt: "", updatedAt: "", cover: null });
 const threads = [
@@ -100,4 +100,15 @@ test("!gamer and other near misses stay ignored", () => {
 test("the chat reminder fits YouTube's limit and names the Discord", () => {
   assert.ok([...CHAT_REMINDER].length <= 200);
   assert.match(CHAT_REMINDER, /https:\/\/discord\.gg\/BHFztBPUe/);
+});
+
+test("the stream reopens at once only during a burst with budget left", () => {
+  assert.equal(nextChatDelay(1000, 5000, 100, 75), 250);
+  assert.equal(nextChatDelay(6000, 5000, 100, 75), 75_000);
+  assert.equal(nextChatDelay(1000, 5000, 0, 75), 300_000);
+});
+
+test("the quota day follows California, not UTC", () => {
+  assert.equal(quotaDay(Date.parse("2026-11-02T07:00:00Z")), "2026-11-01");
+  assert.equal(quotaDay(Date.parse("2026-11-02T09:00:00Z")), "2026-11-02");
 });

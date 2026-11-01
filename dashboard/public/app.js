@@ -377,6 +377,8 @@ const ALERT_MS = 9000, ALERT_GAP_MS = 1500, ALERT_QUEUE = 6;
 const alertQueue = [];
 const seen = { prs: null, games: null, events: null, chat: null, done: null, likes: null };
 let alertBusy = false;
+let alertTimer = null;
+let shownAlert = null;
 
 // A viewer waiting for an answer goes before the automatic cards, and is the last to be dropped.
 function pushAlert(alert) {
@@ -387,6 +389,12 @@ function pushAlert(alert) {
     const drop = alertQueue.findLastIndex((queued) => !queued.priority);
     alertQueue.splice(drop >= 0 ? drop : 0, 1);
   }
+  // A viewer waiting for an answer does not sit through an automatic card.
+  if (alert.priority && shownAlert && !shownAlert.priority) {
+    clearTimeout(alertTimer);
+    endAlert(100);
+    return;
+  }
   playAlerts();
 }
 
@@ -394,15 +402,19 @@ function playAlerts() {
   if (alertBusy || !alertQueue.length || $("takeover").classList.contains("show")) return;
   alertBusy = true;
   const alert = alertQueue.shift();
+  shownAlert = alert;
   const image = alert.image ? `<img src="${escape(alert.image)}" alt="">` : `<div class="alert-icon">${alert.icon ?? "★"}</div>`;
   $("alerts").innerHTML = `<div class="alert ${alert.kind ?? ""}">${image}<div class="alert-text"><div class="alert-kicker">${escape(alert.kicker)}</div><div class="alert-title">${escape(alert.title)}</div>${alert.meta ? `<div class="alert-meta">${escape(alert.meta)}</div>` : ""}${typeof alert.progress === "number" ? `<div class="alert-bar"><span style="width:${Math.min(100, alert.progress).toFixed(1)}%"></span></div>` : ""}</div>${alert.pill ? `<span class="pill">${escape(alert.pill)}</span>` : "<span></span>"}</div>`;
+  alertTimer = setTimeout(endAlert, ALERT_MS, ALERT_GAP_MS);
+}
+
+function endAlert(gap) {
+  $("alerts").innerHTML = "";
+  shownAlert = null;
   setTimeout(() => {
-    $("alerts").innerHTML = "";
-    setTimeout(() => {
-      alertBusy = false;
-      playAlerts();
-    }, ALERT_GAP_MS);
-  }, ALERT_MS);
+    alertBusy = false;
+    playAlerts();
+  }, gap);
 }
 
 function celebrate(kicker, value, note) {
@@ -447,8 +459,6 @@ function detectChanges(state) {
   if (state.games) fresh("games", state.games.recent, (game) => game.number).filter((game) => Date.now() - Date.parse(game.createdAt) < 3_600_000).reverse().forEach((game) => pushAlert(gameAlert(game)));
   const notable = state.events.filter((event) => event.kind === "complete" || event.kind === "release");
   fresh("events", notable, (event) => `${event.kind}|${event.title}`).reverse().forEach((event) => pushAlert({ kicker: event.kind === "release" ? "New release" : "Library finished", title: eventTitle(event.title), meta: event.detail ?? "", icon: event.kind === "release" ? "🚀" : "✅" }));
-  // Chat commands arrive as ready-made cards, oldest first.
-  if (state.chat) fresh("chat", state.chat.answers, (answer) => answer.id).forEach((answer) => pushAlert({ ...answer, priority: true }));
 }
 
 // Calls to action: tied to good news when there is some, and a light reminder otherwise.
@@ -523,6 +533,20 @@ function runDemo(kind) {
   if (kind === "milestone") celebrate("Milestone reached", "9,000", "PS5 system functions implemented");
 }
 
+// Answers go on screen as soon as the server has them, so this reads far more often than the rest of the state.
+async function refreshChat() {
+  try {
+    const response = await fetch("/api/chat", { cache: "no-store" });
+    if (!response.ok) return;
+    const { answers } = await response.json();
+    const known = seen.chat;
+    seen.chat = new Set([...(known ?? []), ...answers.map((answer) => answer.id)]);
+    if (known) answers.filter((answer) => !known.has(answer.id)).forEach((answer) => pushAlert({ ...answer, priority: true }));
+  } catch (error) {
+    console.error("chat", error);
+  }
+}
+
 async function refresh() {
   try {
     const response = await fetch("/api/state", { cache: "no-store" });
@@ -551,5 +575,7 @@ tickScenes();
 setInterval(tickScenes, 1000);
 refresh();
 setInterval(refresh, REFRESH_MS);
+refreshChat();
+setInterval(refreshChat, 2000);
 setInterval(remindCta, CTA_EVERY_MS);
 setTimeout(() => location.reload(), RELOAD_MS);

@@ -17,9 +17,11 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY dashboard/package.json ./
+COPY dashboard/package.json dashboard/package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
 COPY --from=build /app/dist ./dist
 COPY dashboard/public ./public
+COPY dashboard/proto ./proto
 COPY streamer/entrypoint.sh /usr/local/bin/streamer.sh
 COPY streamer/shorts.sh /usr/local/bin/shorts.sh
 COPY start.sh /usr/local/bin/start.sh
