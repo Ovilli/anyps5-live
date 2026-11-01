@@ -11,6 +11,13 @@ const RULES: [RegExp, number][] = [
   [/does not convert/, 0],
 ];
 
+// Replies alone rank a niche game with an active tester above Elden Ring, so well-known series go first.
+const WELL_KNOWN = /elden ring|red dead|persona|silent hill|metal gear|doom|hades|sonic|diablo|007|astro|ghost of|god of war|spider-man|grand theft auto|cyberpunk|resident evil|final fantasy|dragon quest|last of us|minecraft|call of duty|castlevania|ufc|ea sports|gran turismo|demon's souls|horizon|uncharted|ratchet|mortal kombat|street fighter|tekken|assassin's creed/i;
+
+export function byPopularity(a: GameThread, b: GameThread): number {
+  return Number(WELL_KNOWN.test(b.name)) - Number(WELL_KNOWN.test(a.name)) || b.replies - a.replies;
+}
+
 export interface DiscussionJson {
   number: number;
   title: string;

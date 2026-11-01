@@ -9,7 +9,7 @@ An unofficial community project: it is not affiliated with the AnyPS5 maintainer
 ## What is on screen
 
 - **Header**: the next milestone (functions to go, estimated from the 7-day pace) and a countdown to the next scene.
-- **Rotating scenes**: the dashboard for 45 seconds, then one full-screen scene for 25 seconds, readable on a phone: a game spotlight, the next milestone, top contributors, the biggest gains.
+- **Rotating scenes**: the dashboard for 45 seconds, then one full-screen scene for 25 seconds, readable on a phone: a spotlight on games reaching gameplay (the best-known ones come back most often), the next milestone, top contributors, the biggest gains.
 - **Alerts**: a card slides in for each new merged PR, new game report, finished library and new release. Each 1,000th function gets a full-screen celebration.
 - **Calls to action**: a like or subscribe card every 4 minutes and after each milestone, and a live like goal beside the title once `YOUTUBE_API_KEY` and `YOUTUBE_VIDEO_ID` are set.
 

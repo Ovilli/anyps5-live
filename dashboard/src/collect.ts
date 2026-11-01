@@ -1,5 +1,5 @@
 import { historyEvents, snapshotEvents } from "./events.js";
-import { STAGES, toThread, type DiscussionJson } from "./games.js";
+import { STAGES, byPopularity, toThread, type DiscussionJson } from "./games.js";
 import { GitHub, getJson } from "./http.js";
 import type { Store } from "./store.js";
 import type { HistoryPoint, LiveEvent, MergedPr, OpenedPr, PrReport, Snapshot, State } from "./types.js";
@@ -388,8 +388,7 @@ export class Collector {
         active24h: threads.filter((thread) => Date.now() - Date.parse(thread.updatedAt) < 86_400_000).length,
         stages: STAGES.map((stage) => ({ name: stage, count: count(stage) })),
         recent: threads.slice(0, 24),
-        // The most discussed games tend to be the ones a viewer has heard of.
-        highlights: threads.filter((thread) => thread.stage === "In game" && thread.cover).sort((a, b) => b.replies - a.replies).slice(0, 6),
+        highlights: threads.filter((thread) => thread.stage === "In game" && thread.cover).sort(byPopularity).slice(0, 24),
       };
     });
   }
