@@ -1,13 +1,25 @@
+import { answerCommand } from "./chat.js";
 import { historyEvents, snapshotEvents } from "./events.js";
 import { STAGES, toThread, type DiscussionJson } from "./games.js";
 import { GitHub, getJson } from "./http.js";
 import type { Store } from "./store.js";
-import type { HistoryPoint, LiveEvent, MergedPr, OpenedPr, PrReport, Snapshot, State } from "./types.js";
+import type { ChatAnswer, GameThread, HistoryPoint, LiveEvent, MergedPr, OpenedPr, PrReport, Snapshot, State } from "./types.js";
 
 const REPO = process.env.ANYPS5_REPO ?? "boykopovar/AnyPS5";
 const PAGES = (process.env.ANYPS5_PAGES ?? "https://boykopovar.github.io/AnyPS5").replace(/\/$/, "");
 const ROADMAP = (process.env.ROADMAP_URL ?? "https://alxcbtw.github.io/anyps5-roadmap").replace(/\/$/, "");
 const MINUTE = 60_000;
+// Chat commands, off unless CHAT_COMMANDS=1. Each read costs 5 of the API key's 10,000 daily units, on top of
+// the like counter's 1 unit a minute: one read a minute uses 8,640 units a day in all.
+const CHAT_COMMANDS = process.env.CHAT_COMMANDS === "1";
+const CHAT_POLL_SECONDS = Math.max(30, Number(process.env.CHAT_POLL_SECONDS) || 60);
+const CHAT_COOLDOWN_MS = 60_000;
+const CHAT_ANSWERS_PER_READ = 3;
+
+interface ChatJson {
+  nextPageToken?: string;
+  items: { id: string; snippet: { type: string; displayMessage?: string }; authorDetails: { channelId: string; displayName: string } }[];
+}
 
 interface ProgressJson {
   libraries: { done: number; total: number; percent: number; groups: { name: string; label?: string; done: number; todo: number }[] };
@@ -85,6 +97,9 @@ export class Collector {
   private current: ProgressJson | null = null;
   private covers = new Map<string, string>();
   private gameCategory: string | null = null;
+  private threads: GameThread[] = [];
+  private liveChatId: string | null = null;
+  private chat: { id: string | null; token: string | null; asked: Map<string, number> } = { id: null, token: null, asked: new Map() };
   readonly state: State = {
     updatedAt: new Date().toISOString(),
     sources: {},
@@ -95,6 +110,7 @@ export class Collector {
     games: null,
     events: [],
     youtube: { likes: null, viewers: null, shorts: Boolean(process.env.YOUTUBE_REFRESH_TOKEN) },
+    chat: { answers: [] },
   };
 
   // Reports on open PRs change with every push, so they are kept in memory and read again after a while.
@@ -380,6 +396,7 @@ export class Collector {
       } while (after);
 
       const threads = discussions.map((discussion) => toThread(discussion, this.covers));
+      this.threads = threads;
       const count = (stage: string) => threads.filter((thread) => thread.stage === stage).length;
       this.state.games = {
         tracked: threads.length,
@@ -404,12 +421,46 @@ export class Collector {
         signal: AbortSignal.timeout(30_000),
       });
       if (!response.ok) throw new Error(`YouTube ${response.status}`);
-      const { items } = (await response.json()) as { items: { statistics?: { likeCount?: string }; liveStreamingDetails?: { concurrentViewers?: string } }[] };
+      const { items } = (await response.json()) as { items: { statistics?: { likeCount?: string }; liveStreamingDetails?: { concurrentViewers?: string; activeLiveChatId?: string } }[] };
       const item = items[0];
       if (!item) throw new Error(`YouTube has no video ${video}`);
       const number = (value: string | undefined) => (value === undefined ? null : Number(value));
       this.state.youtube.likes = number(item.statistics?.likeCount);
       this.state.youtube.viewers = number(item.liveStreamingDetails?.concurrentViewers);
+      this.liveChatId = item.liveStreamingDetails?.activeLiveChatId ?? null;
+    });
+  }
+
+  // Reads new chat messages and answers !game, !lib and !help on screen. Nothing is posted back to the chat.
+  async collectChat(): Promise<void> {
+    const key = process.env.YOUTUBE_API_KEY, liveChatId = this.liveChatId;
+    if (!key || !liveChatId) return;
+    await this.run("chat", async () => {
+      if (liveChatId !== this.chat.id) this.chat = { id: liveChatId, token: null, asked: new Map() };
+      const query = new URLSearchParams({ liveChatId, part: "id,snippet,authorDetails", maxResults: "200" });
+      if (this.chat.token) query.set("pageToken", this.chat.token);
+      const response = await fetch(`https://www.googleapis.com/youtube/v3/liveChat/messages?${query}`, {
+        headers: { "X-Goog-Api-Key": key },
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!response.ok) throw new Error(`YouTube chat ${response.status}`);
+      const body = (await response.json()) as ChatJson;
+      const first = this.chat.token === null;
+      this.chat.token = body.nextPageToken ?? this.chat.token;
+      // The first read returns the recent history: those commands were typed before anyone listened.
+      if (first) return;
+      const now = Date.now();
+      for (const [author, at] of this.chat.asked) if (now - at >= CHAT_COOLDOWN_MS) this.chat.asked.delete(author);
+      const answers: ChatAnswer[] = [];
+      for (const item of body.items) {
+        if (answers.length >= CHAT_ANSWERS_PER_READ) break;
+        if (item.snippet.type !== "textMessageEvent" || this.chat.asked.has(item.authorDetails.channelId)) continue;
+        const answer = answerCommand(item.id, item.snippet.displayMessage ?? "", item.authorDetails.displayName, this.threads, this.state.libraries?.all ?? []);
+        if (!answer) continue;
+        this.chat.asked.set(item.authorDetails.channelId, now);
+        answers.push(answer);
+      }
+      this.state.chat.answers = [...this.state.chat.answers, ...answers].slice(-10);
     });
   }
 
@@ -434,5 +485,6 @@ export class Collector {
     every(180, () => this.collectCovers());
     every(10, () => this.collectGames());
     every(1, () => this.collectYoutube());
+    if (CHAT_COMMANDS) every(CHAT_POLL_SECONDS / 60, () => this.collectChat());
   }
 }

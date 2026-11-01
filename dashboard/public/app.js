@@ -366,7 +366,7 @@ function tickScenes() {
 // Alerts: new merged PRs, new game reports and finished libraries slide in one at a time.
 const ALERT_MS = 9000, ALERT_GAP_MS = 1500, ALERT_QUEUE = 6;
 const alertQueue = [];
-const seen = { prs: null, games: null, events: null, done: null, likes: null };
+const seen = { prs: null, games: null, events: null, chat: null, done: null, likes: null };
 let alertBusy = false;
 
 function pushAlert(alert) {
@@ -432,6 +432,8 @@ function detectChanges(state) {
   if (state.games) fresh("games", state.games.recent, (game) => game.number).filter((game) => Date.now() - Date.parse(game.createdAt) < 3_600_000).reverse().forEach((game) => pushAlert(gameAlert(game)));
   const notable = state.events.filter((event) => event.kind === "complete" || event.kind === "release");
   fresh("events", notable, (event) => `${event.kind}|${event.title}`).reverse().forEach((event) => pushAlert({ kicker: event.kind === "release" ? "New release" : "Library finished", title: eventTitle(event.title), meta: event.detail ?? "", icon: event.kind === "release" ? "🚀" : "✅" }));
+  // Chat commands arrive as ready-made cards, oldest first.
+  if (state.chat) fresh("chat", state.chat.answers, (answer) => answer.id).forEach(pushAlert);
 }
 
 // Calls to action: tied to good news when there is some, and a light reminder otherwise.
@@ -484,6 +486,13 @@ function runDemo(kind) {
   if (kind === "alert" && github?.mergedPrs?.[0]) {
     pushAlert(prAlert({ ...github.mergedPrs[0], report: { implemented: 12, declared: 0 } }));
     if (latest.games?.recent?.[0]) pushAlert(gameAlert(latest.games.recent[0]));
+  }
+  if (kind === "chat") {
+    const game = latest?.games?.highlights?.[0] ?? latest?.games?.recent?.[0];
+    if (game) pushAlert({ kind: "game", kicker: "!game · asked by Viewer", title: game.name, meta: game.titleId ?? "", image: game.cover, icon: "🎮", pill: game.stage ?? "No stage yet" });
+    const library = latest?.libraries?.all?.[0];
+    if (library) pushAlert({ kicker: "!lib · asked by Viewer", title: library.label, meta: `${fmt(library.done)} / ${fmt(library.total)} functions implemented`, icon: "📚", pill: `${Math.floor((library.done / library.total) * 100)}%` });
+    pushAlert({ kind: "cta", kicker: "!help · asked by Viewer", title: "!game <name>  ·  !lib <name>", meta: "Type one in chat: the answer shows up here", icon: "💬" });
   }
   if (kind === "milestone") celebrate("Milestone reached", "9,000", "PS5 system functions implemented");
 }

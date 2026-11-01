@@ -11,6 +11,7 @@ An unofficial community project: it is not affiliated with the AnyPS5 maintainer
 - **Header**: the next milestone (functions to go, estimated from the 7-day pace) and a countdown to the next scene.
 - **Rotating scenes**: the dashboard for 45 seconds, then one full-screen scene for 25 seconds, readable on a phone: a game spotlight, the next milestone, top contributors, the biggest gains.
 - **Alerts**: a card slides in for each new merged PR, new game report, finished library and new release. Each 1,000th function gets a full-screen celebration.
+- **Chat commands**: viewers type `!game <name>` to see how far a game got, `!lib <name>` for a system library's progress, or `!help`; the answer slides in on screen with their name. Set `CHAT_COMMANDS=1` to turn them on.
 - **Calls to action**: a like or subscribe card every 4 minutes and after each milestone, and a live like goal beside the title once `YOUTUBE_API_KEY` and `YOUTUBE_VIDEO_ID` are set.
 
 The dashboard scene shows:
@@ -96,7 +97,7 @@ docker run -d --restart unless-stopped -e YOUTUBE_STREAM_KEY=... -v anyps5-data:
 
   Then open <http://localhost:8080> in a window sized 1920×1080.
 
-- **See one scene or alert**: add `?scene=games` (or `contributors`, `movers`, `milestone`) to pin a scene, or `?demo=alert` / `?demo=milestone` to play an alert.
+- **See one scene or alert**: add `?scene=games` (or `contributors`, `movers`, `milestone`) to pin a scene, or `?demo=alert` / `?demo=milestone` / `?demo=chat` to play an alert.
 
 - **Record 30 seconds to a file** instead of streaming:
 
@@ -151,6 +152,7 @@ docker compose run --rm --entrypoint chromium streamer --headless=new --no-sandb
 | `FPS` / `CAPTURE_FPS` | `30` / `30` | Output and capture frame rates. YouTube needs a steady 30 fps at a constant bitrate. A lower capture rate repeats frames, which saves some CPU but makes the animations stutter |
 | `VIDEO_BITRATE` / `BUFSIZE` / `PRESET` | `12000k` / `24000k` / `superfast` | Encoder settings, constant bitrate |
 | `YOUTUBE_API_KEY` / `YOUTUBE_VIDEO_ID` | | Reads the live's likes each minute for the like goal |
+| `CHAT_COMMANDS` / `CHAT_POLL_SECONDS` | `0` / `60` | Answers `!game`, `!lib` and `!help` from the live chat on screen, reading the chat this often. Needs the API key and video ID. Each read costs 5 of the key's 10,000 daily units, so 60 seconds (8,640 units a day with the like goal) is the lowest safe value on one key. Each viewer can ask once a minute, and at most 3 answers are shown per read |
 | `SHORTS` / `SHORT_HOUR_UTC` / `SHORT_PRIVACY` | `1` / `18` / `public` | The daily Short: on or off, the hour it is made, and its privacy on YouTube |
 | `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET` / `YOUTUBE_REFRESH_TOKEN` | | Uploads the daily Short |
 | `PORT` | `8080` (`3000` in the single-container image) | Dashboard port |

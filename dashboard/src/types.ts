@@ -58,6 +58,18 @@ export interface GameThread {
   cover: string | null;
 }
 
+// Shaped like a client-side alert card, so the page shows it as is.
+export interface ChatAnswer {
+  id: string;
+  kind?: string;
+  kicker: string;
+  title: string;
+  meta?: string;
+  image?: string;
+  icon?: string;
+  pill?: string;
+}
+
 export interface Snapshot {
   date: string;
   libraries: Record<string, [number, number]>;
@@ -120,4 +132,5 @@ export interface State {
     viewers: number | null;
     shorts: boolean;
   };
+  chat: { answers: ChatAnswer[] };
 }
