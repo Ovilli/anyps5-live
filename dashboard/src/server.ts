@@ -37,12 +37,11 @@ function shortMeta(): unknown {
   const { progress, github } = collector.state;
   const number = new Intl.NumberFormat("en-US");
   const gains = progress?.day ? `+${number.format(progress.day.done)} functions` : "progress";
-  const merged = github?.merged24h ? `, ${number.format(github.merged24h)} PRs merged` : "";
   const live = process.env.YOUTUBE_VIDEO_ID ? `\n\nWatch it live, 24/7: https://www.youtube.com/watch?v=${process.env.YOUTUBE_VIDEO_ID}` : "";
   return {
     snippet: {
-      title: `AnyPS5 today: ${gains}${merged} #Shorts`,
-      description: `Today's progress of AnyPS5, the project porting PS5 games to PC.${live}\n\nAn unofficial community project, not affiliated with the AnyPS5 maintainers or with Sony.`,
+      title: `PS5 games on PC with no emulator: AnyPS5 today, ${gains} #Shorts`,
+      description: `AnyPS5 is a community project that converts PS5 games to run natively on Windows and Linux, with no emulator. Reaching gameplay does not mean a game is playable from start to finish yet. This is today's progress.${live}\n\nAn unofficial community project, not affiliated with the AnyPS5 maintainers or with Sony.`,
       tags: ["AnyPS5", "PS5", "emulation"],
       categoryId: "20",
     },

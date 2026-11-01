@@ -40,7 +40,7 @@ record() {
     -f x11grab -draw_mouse 0 -framerate 30 -video_size 1080x1920 -i "${SHORT_DISPLAY}.0" \
     "${audio[@]}" -map 0:v -map 1:a -t 31 \
     -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p \
-    -af "loudnorm=I=-16:TP=-2:LRA=11,afade=t=in:d=0.5,afade=t=out:st=29.5:d=1.5" -c:a aac -b:a 160k -ar 44100 -ac 2 \
+    -af "loudnorm=I=-27:TP=-2:LRA=11,afade=t=in:d=0.5,afade=t=out:st=29.5:d=1.5" -c:a aac -b:a 160k -ar 44100 -ac 2 \
     -movflags +faststart "$file.part.mp4"
   status=$?
   kill "$browser" "$xvfb" 2>/dev/null

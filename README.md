@@ -120,7 +120,7 @@ docker run -d --restart unless-stopped -e YOUTUBE_STREAM_KEY=... -v anyps5-data:
 
 ## Daily Short
 
-Every day from `SHORT_HOUR_UTC`, the streamer records a 30-second vertical video of the day's progress into `/recordings/shorts` (the last 14 days are kept) on a second virtual display, without touching the stream. `docker compose exec streamer shorts.sh once` makes today's right away.
+Every day from `SHORT_HOUR_UTC`, the streamer records a 30-second vertical video into `/recordings/shorts` (the last 14 days are kept) on a second virtual display, without touching the stream. It introduces the project for viewers who have never heard of it, shows well-known games reaching gameplay, then the day's progress. `docker compose exec streamer shorts.sh once` makes today's right away.
 
 To upload it automatically:
 

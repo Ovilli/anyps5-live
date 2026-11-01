@@ -17,35 +17,38 @@ function countUp(node, target) {
   requestAnimationFrame(step);
 }
 
+const cover = (game) => `<div class="cover-tile"><img src="${escape(game.cover)}" alt=""><div class="cover-title">${escape(game.name)}</div></div>`;
+
+// Written for someone who lands on this in a feed and has never heard of the project.
 function beats(state) {
-  const { progress, github, games, libraries } = state;
+  const { progress, github, games } = state;
   const target = (Math.floor(progress.done / 1000) + 1) * 1000;
   const pace = progress.week?.done > 0 ? progress.week.done / 7 : null;
   const days = pace ? Math.max(1, Math.round((target - progress.done) / pace)) : null;
+  const highlights = games?.highlights ?? [];
   const list = [
-    `<div class="kicker">AnyPS5 today</div>
-     <div class="huge up-text" id="gain" data-gain="${progress.day?.done ?? 0}">+0</div>
-     <div class="line">PS5 functions implemented in 24 hours</div>
-     <div class="small">The project porting PS5 games to PC</div>`,
-    `<div class="kicker">${fmt(progress.done)} done so far</div>
-     <canvas id="short-map"></canvas>
-     <div class="small">Each blue square is a PS5 system function that now works.</div>`,
+    `${highlights.length >= 4 ? `<div class="collage">${highlights.slice(0, 4).map((game) => `<img src="${escape(game.cover)}" alt="">`).join("")}</div>` : ""}
+     <div class="headline">PS5 games on PC.<br><span class="up-text">No emulator.</span></div>
+     <div class="line-soft">AnyPS5 is a community project that converts them to run natively on Windows and Linux.</div>`,
   ];
-  if (github?.topAuthors?.length) {
-    list.push(`<div class="kicker">${fmt(github.merged24h)} PRs merged today</div>
-      <div class="people">${github.topAuthors.slice(0, 3).map((person) => `<div class="person"><img src="${escape(avatar(person.avatar, 240))}" alt="">${escape(person.author)}<span>${fmt(person.merged)}</span></div>`).join("")}</div>
-      <div class="small">Today's top contributors</div>`);
+  if (highlights.length && games.inGame) {
+    list.push(`<div class="kicker">${fmt(games.inGame)} games already reach gameplay</div>
+      <div class="covers">${highlights.map(cover).join("")}</div>
+      <div class="small">Reported by testers. Most can't be finished yet: it's still early.</div>`);
   }
-  if (games?.recent?.length) {
-    const reported = games.recent.filter((game) => game.stage).slice(0, 4);
-    list.push(`<div class="kicker">${fmt(games.inGame)} games reach gameplay</div>
-      <div class="games">${reported.map((game) => `<div class="game">${escape(game.name)}<small>${escape(game.stage)}</small></div>`).join("")}</div>
-      <div class="small">Latest test reports</div>`);
+  list.push(`<div class="kicker">What's left to build</div>
+     <div class="line">Games call PS5 system functions. PC needs its own version of each one.</div>
+     <canvas id="short-map"></canvas>
+     <div class="line"><span class="up-text">${fmt(progress.done)}</span> rebuilt · <span class="up-text" id="gain" data-gain="${progress.day?.done ?? 0}">+0</span> in 24 hours</div>`);
+  if (github?.topAuthors?.length) {
+    list.push(`<div class="kicker">Built in the open</div>
+      <div class="line">${fmt(github.merged24h)} code changes added in the last 24 hours</div>
+      <div class="people">${github.topAuthors.slice(0, 3).map((person) => `<div class="person"><img src="${escape(avatar(person.avatar, 240))}" alt="">${escape(person.author)}<span>${fmt(person.merged)}</span></div>`).join("")}</div>`);
   }
   list.push(`<div class="kicker">Next goal</div>
      <div class="huge">${fmt(target)}</div>
      <div class="bar-big"><span style="width:${(((progress.done % 1000) / 1000) * 100).toFixed(1)}%"></span></div>
-     <div class="line">${fmt(target - progress.done)} to go${days ? ` · about ${days} day${days > 1 ? "s" : ""}` : ""}</div>
+     <div class="line">functions rebuilt${days ? `, in about ${days} day${days > 1 ? "s" : ""}` : ""}</div>
      <div class="sub">Subscribe for tomorrow's update</div>`);
   return list;
 }
@@ -55,20 +58,20 @@ async function main() {
   const root = document.getElementById("short");
   // Five beats fill the 30 seconds; with fewer, each one simply lasts longer.
   const list = beats(state);
-  root.innerHTML = list.map((html) => `<section class="beat">${html}</section>`).join("");
-  const sections = [...root.children];
+  root.innerHTML = list.map((html) => `<section class="beat">${html}</section>`).join("") + `<div class="short-brand">AnyPS5 · PS5 games on PC</div>`;
+  const sections = [...root.querySelectorAll(".beat")];
   sections[0].classList.add("on");
   const beatMs = Math.max(BEAT_MS, 30_000 / list.length);
-  await document.fonts.ready;
+  await Promise.all([document.fonts.ready, ...[...root.querySelectorAll("img")].map((image) => image.decode().catch(() => {}))]);
   const canvas = document.getElementById("short-map");
   if (canvas && state.libraries) drawLibraryMap(canvas, state.libraries.all, { labels: false, background: "#0d0d0d" });
   setTimeout(() => {
-    const gain = document.getElementById("gain");
-    countUp(gain, Number(gain.dataset.gain));
     sections.forEach((section, index) => {
       if (index) setTimeout(() => {
         section.classList.add("on");
         sections[index - 1].classList.remove("on");
+        const gain = section.querySelector("#gain");
+        if (gain) countUp(gain, Number(gain.dataset.gain));
       }, index * beatMs);
     });
   }, Math.max(0, START_AT - Date.now()));

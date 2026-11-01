@@ -112,6 +112,7 @@ export interface State {
     active24h: number;
     stages: { name: string; count: number }[];
     recent: GameThread[];
+    highlights: GameThread[];
   } | null;
   events: LiveEvent[];
   youtube: {
