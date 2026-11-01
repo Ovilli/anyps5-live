@@ -94,6 +94,7 @@ export class Collector {
     github: null,
     games: null,
     events: [],
+    youtube: { likes: null, viewers: null, shorts: Boolean(process.env.YOUTUBE_REFRESH_TOKEN) },
   };
 
   // Reports on open PRs change with every push, so they are kept in memory and read again after a while.
@@ -391,6 +392,25 @@ export class Collector {
     });
   }
 
+  // The key travels in a header: an error message with the URL ends up in the public /api/state.
+  async collectYoutube(): Promise<void> {
+    const key = process.env.YOUTUBE_API_KEY, video = process.env.YOUTUBE_VIDEO_ID;
+    if (!key || !video) return;
+    await this.run("youtube", async () => {
+      const response = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics,liveStreamingDetails&id=${encodeURIComponent(video)}`, {
+        headers: { "X-Goog-Api-Key": key },
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!response.ok) throw new Error(`YouTube ${response.status}`);
+      const { items } = (await response.json()) as { items: { statistics?: { likeCount?: string }; liveStreamingDetails?: { concurrentViewers?: string } }[] };
+      const item = items[0];
+      if (!item) throw new Error(`YouTube has no video ${video}`);
+      const number = (value: string | undefined) => (value === undefined ? null : Number(value));
+      this.state.youtube.likes = number(item.statistics?.likeCount);
+      this.state.youtube.viewers = number(item.liveStreamingDetails?.concurrentViewers);
+    });
+  }
+
   start(): void {
     const fast = this.github.authenticated;
     const every = (minutes: number, task: () => Promise<void>) => setInterval(() => void task(), minutes * MINUTE).unref();
@@ -402,6 +422,7 @@ export class Collector {
       await this.collectRepository();
       await this.collectActivity();
       await this.collectCounts();
+      await this.collectYoutube();
     })();
     every(fast ? 10 : 15, () => this.collectProgress());
     every(30, () => this.collectHistory());
@@ -410,5 +431,6 @@ export class Collector {
     every(fast ? 5 : 10, () => this.collectCounts());
     every(180, () => this.collectCovers());
     every(10, () => this.collectGames());
+    every(1, () => this.collectYoutube());
   }
 }

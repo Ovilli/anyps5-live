@@ -21,8 +21,9 @@ COPY dashboard/package.json ./
 COPY --from=build /app/dist ./dist
 COPY dashboard/public ./public
 COPY streamer/entrypoint.sh /usr/local/bin/streamer.sh
+COPY streamer/shorts.sh /usr/local/bin/shorts.sh
 COPY start.sh /usr/local/bin/start.sh
-RUN chmod 0755 /usr/local/bin/streamer.sh /usr/local/bin/start.sh \
+RUN chmod 0755 /usr/local/bin/streamer.sh /usr/local/bin/shorts.sh /usr/local/bin/start.sh \
  && mkdir -p /data /music /recordings \
  && chown node:node /data /recordings
 

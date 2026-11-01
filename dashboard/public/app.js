@@ -366,7 +366,7 @@ function tickScenes() {
 // Alerts: new merged PRs, new game reports and finished libraries slide in one at a time.
 const ALERT_MS = 9000, ALERT_GAP_MS = 1500, ALERT_QUEUE = 6;
 const alertQueue = [];
-const seen = { prs: null, games: null, events: null, done: null };
+const seen = { prs: null, games: null, events: null, done: null, likes: null };
 let alertBusy = false;
 
 function pushAlert(alert) {
@@ -424,6 +424,8 @@ function detectChanges(state) {
     seen.done = state.progress.done;
     if (before !== null && Math.floor(state.progress.done / MILESTONE_STEP) > Math.floor(before / MILESTONE_STEP)) {
       celebrate("Milestone reached", fmt(Math.floor(state.progress.done / MILESTONE_STEP) * MILESTONE_STEP), "PS5 system functions implemented");
+      const reached = Math.floor(state.progress.done / MILESTONE_STEP) * MILESTONE_STEP;
+      pushAlert(likeCta(`Like if you want to see ${fmt(reached + MILESTONE_STEP)}`));
     }
   }
   if (state.github) fresh("prs", state.github.mergedPrs, (pr) => pr.number).reverse().forEach((pr) => pushAlert(prAlert(pr)));
@@ -432,7 +434,52 @@ function detectChanges(state) {
   fresh("events", notable, (event) => `${event.kind}|${event.title}`).reverse().forEach((event) => pushAlert({ kicker: event.kind === "release" ? "New release" : "Library finished", title: eventTitle(event.title), meta: event.detail ?? "", icon: event.kind === "release" ? "🚀" : "✅" }));
 }
 
+// Calls to action: tied to good news when there is some, and a light reminder otherwise.
+const CTA_EVERY_MS = 4 * 60_000;
+let ctaTurn = 0;
+
+function likeGoal(likes) {
+  const step = likes < 100 ? 25 : likes < 500 ? 50 : likes < 2000 ? 100 : 500;
+  return (Math.floor(likes / step) + 1) * step;
+}
+
+function likeCta(title) {
+  const likes = latest?.youtube?.likes;
+  const meta = typeof likes === "number" ? `${fmt(likes)} / ${fmt(likeGoal(likes))} likes` : "It helps more people find AnyPS5";
+  return { kind: "cta", kicker: "Enjoying the live?", title, meta, icon: "👍" };
+}
+
+function subscribeCta() {
+  const shorts = latest?.youtube?.shorts;
+  return { kind: "cta", kicker: "Stay in the loop", title: shorts ? "Subscribe for a daily AnyPS5 Short" : "Subscribe to follow AnyPS5's progress", meta: shorts ? "The day's progress, in 30 seconds" : "", icon: "🔔" };
+}
+
+function remindCta() {
+  if (document.hidden) return;
+  pushAlert(ctaTurn % 2 === 0 ? likeCta("Hit like to support the stream") : subscribeCta());
+  ctaTurn += 1;
+}
+
+function renderLikes(youtube) {
+  const likes = youtube?.likes;
+  const node = $("likes");
+  node.hidden = typeof likes !== "number";
+  if (node.hidden) return;
+  const goal = likeGoal(likes);
+  const before = seen.likes;
+  seen.likes = likes;
+  if (typeof before === "number" && likeGoal(before) <= likes) {
+    pushAlert({ kind: "cta", kicker: "Like goal reached", title: `${fmt(likeGoal(before))} likes, thank you!`, meta: `Next goal: ${fmt(goal)} likes`, icon: "🎉" });
+  }
+  const start = goal - (likes < 100 ? 25 : likes < 500 ? 50 : likes < 2000 ? 100 : 500);
+  node.innerHTML = `👍 ${fmt(likes)} / ${fmt(goal)}<span class="likes-bar"><span style="width:${(((likes - start) / (goal - start)) * 100).toFixed(1)}%"></span></span>`;
+}
+
 function runDemo(kind) {
+  if (kind === "cta") {
+    pushAlert(likeCta("Hit like to support the stream"));
+    pushAlert(subscribeCta());
+  }
   const github = latest?.github;
   if (kind === "alert" && github?.mergedPrs?.[0]) {
     pushAlert(prAlert({ ...github.mergedPrs[0], report: { implemented: 12, declared: 0 } }));
@@ -455,6 +502,7 @@ async function refresh() {
     renderEvents(state.events);
     renderGames(state.games);
     renderMap(state.libraries);
+    renderLikes(state.youtube);
     detectChanges(state);
     if (first && params.get("demo")) runDemo(params.get("demo"));
   } catch (error) {
@@ -468,4 +516,5 @@ tickScenes();
 setInterval(tickScenes, 1000);
 refresh();
 setInterval(refresh, REFRESH_MS);
+setInterval(remindCta, CTA_EVERY_MS);
 setTimeout(() => location.reload(), RELOAD_MS);

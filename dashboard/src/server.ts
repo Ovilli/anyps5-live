@@ -32,11 +32,34 @@ const server = createServer((request, response) => {
   });
 });
 
+// The body of the YouTube upload request for today's Short.
+function shortMeta(): unknown {
+  const { progress, github } = collector.state;
+  const number = new Intl.NumberFormat("en-US");
+  const gains = progress?.day ? `+${number.format(progress.day.done)} functions` : "progress";
+  const merged = github?.merged24h ? `, ${number.format(github.merged24h)} PRs merged` : "";
+  const live = process.env.YOUTUBE_VIDEO_ID ? `\n\nWatch it live, 24/7: https://www.youtube.com/watch?v=${process.env.YOUTUBE_VIDEO_ID}` : "";
+  return {
+    snippet: {
+      title: `AnyPS5 today: ${gains}${merged} #Shorts`,
+      description: `Today's progress of AnyPS5, the project porting PS5 games to PC.${live}\n\nAn unofficial community project, not affiliated with the AnyPS5 maintainers or with Sony.`,
+      tags: ["AnyPS5", "PS5", "emulation"],
+      categoryId: "20",
+    },
+    status: { privacyStatus: process.env.SHORT_PRIVACY || "public", selfDeclaredMadeForKids: false },
+  };
+}
+
 async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
   const url = new URL(request.url ?? "/", "http://localhost");
   if (url.pathname === "/api/state") {
     response.writeHead(200, { "Content-Type": TYPES[".json"]!, "Cache-Control": "no-store" });
     response.end(JSON.stringify({ ...collector.state, startedAt: collector.startedAt, serverTime: new Date().toISOString() }));
+    return;
+  }
+  if (url.pathname === "/api/short-meta") {
+    response.writeHead(200, { "Content-Type": TYPES[".json"]!, "Cache-Control": "no-store" });
+    response.end(JSON.stringify(shortMeta()));
     return;
   }
   if (url.pathname === "/healthz") {

@@ -114,4 +114,9 @@ export interface State {
     recent: GameThread[];
   } | null;
   events: LiveEvent[];
+  youtube: {
+    likes: number | null;
+    viewers: number | null;
+    shorts: boolean;
+  };
 }

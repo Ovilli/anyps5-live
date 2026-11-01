@@ -12,7 +12,8 @@ RUN useradd --create-home --uid 1000 streamer \
  && chown streamer:streamer /recordings
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod 0755 /usr/local/bin/entrypoint.sh
+COPY shorts.sh /usr/local/bin/shorts.sh
+RUN chmod 0755 /usr/local/bin/entrypoint.sh /usr/local/bin/shorts.sh
 
 USER streamer
 ENV DASHBOARD_URL=http://dashboard:8080/ \

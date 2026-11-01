@@ -98,6 +98,8 @@ encode() {
     "${duration[@]}" -f "$FORMAT" "$OUTPUT"
 }
 
+[ ${#duration[@]} -eq 0 ] && [ "${SHORTS:-1}" = 1 ] && /usr/local/bin/shorts.sh &
+
 log "Streaming ${WIDTH}x${HEIGHT} (page scale ${SCALE}) at ${FPS} fps captured at ${CAPTURE_FPS}, ${VIDEO_BITRATE} CBR, to ${TARGET}"
 if [ ${#duration[@]} -gt 0 ]; then
   encode

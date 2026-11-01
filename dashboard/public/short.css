@@ -1,0 +1,21 @@
+/* The daily Short: 1080x1920, big type, and nothing in the areas YouTube covers with its own buttons. */
+html, body { width: 1080px; height: 1920px; }
+.short { position: relative; width: 1080px; height: 1920px; overflow: hidden; }
+.beat { position: absolute; inset: 0; padding: 220px 70px 420px 70px; display: flex; flex-direction: column; justify-content: center; gap: 44px; background: var(--page); opacity: 0; transition: opacity 0.35s ease; }
+.beat.on { opacity: 1; }
+.kicker { font-size: 50px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--series-1); }
+.huge { font-size: 230px; font-weight: 800; letter-spacing: -0.04em; line-height: 0.95; font-variant-numeric: tabular-nums; }
+.up-text { color: var(--good); }
+.line { font-size: 66px; font-weight: 700; line-height: 1.15; }
+.small { font-size: 44px; color: var(--ink-2); line-height: 1.25; }
+#short-map { width: 940px; height: 800px; display: block; border-radius: 14px; }
+.people { display: flex; flex-direction: column; gap: 30px; }
+.person { display: flex; align-items: center; gap: 30px; font-size: 56px; font-weight: 700; }
+.person img { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; background: var(--surface-2); }
+.person span { color: var(--good); margin-left: auto; }
+.game { font-size: 52px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.game small { display: block; font-size: 38px; font-weight: 500; color: var(--muted); margin-top: 4px; }
+.games { display: flex; flex-direction: column; gap: 30px; }
+.bar-big { height: 44px; border-radius: 14px; background: var(--todo); overflow: hidden; }
+.bar-big > span { display: block; height: 100%; background: var(--series-1); }
+.sub { align-self: flex-start; font-size: 58px; font-weight: 800; padding: 26px 44px; border-radius: 22px; background: var(--series-8); color: #fff; }

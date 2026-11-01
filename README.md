@@ -11,6 +11,7 @@ An unofficial community project: it is not affiliated with the AnyPS5 maintainer
 - **Header**: the next milestone (functions to go, estimated from the 7-day pace) and a countdown to the next scene.
 - **Rotating scenes**: the dashboard for 45 seconds, then one full-screen scene for 25 seconds, readable on a phone: a game spotlight, the next milestone, top contributors, the biggest gains.
 - **Alerts**: a card slides in for each new merged PR, new game report, finished library and new release. Each 1,000th function gets a full-screen celebration.
+- **Calls to action**: a like or subscribe card every 4 minutes and after each milestone, and a live like goal beside the title once `YOUTUBE_API_KEY` and `YOUTUBE_VIDEO_ID` are set.
 
 The dashboard scene shows:
 
@@ -117,6 +118,18 @@ docker run -d --restart unless-stopped -e YOUTUBE_STREAM_KEY=... -v anyps5-data:
 
 **Soundtrack**: YouTube requires an audio track, so the streamer sends silence by default. Put `.mp3`, `.m4a`, `.ogg`, `.flac` or `.wav` files in `./music` to play them in shuffled order instead, then restart the streamer; their loudness is evened out. Use only music you have the rights to stream. In single-container mode, mount the folder on `/music`.
 
+## Daily Short
+
+Every day from `SHORT_HOUR_UTC`, the streamer records a 30-second vertical video of the day's progress into `/recordings/shorts` (the last 14 days are kept) on a second virtual display, without touching the stream. `docker compose exec streamer shorts.sh once` makes today's right away.
+
+To upload it automatically:
+
+1. In a Google Cloud project, enable the *YouTube Data API v3* and create an OAuth client of type *Desktop app*. Set the consent screen's publishing status to **In production**: in *Testing*, the refresh token stops working after 7 days.
+2. Run `node tools/youtube-auth.mjs <client id> <client secret>` on a computer with a browser, and sign in as the channel's owner.
+3. Set `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET` and `YOUTUBE_REFRESH_TOKEN`, then restart.
+
+The logs give each Short's URL and privacy. YouTube can lock uploads from an unaudited API project as private: if they come back `private` while `SHORT_PRIVACY` is `public`, the project needs YouTube's [API audit](https://support.google.com/youtube/contact/yt_api_form).
+
 ## Thumbnail
 
 `thumbnail.png` (1280×720) is ready to upload as the stream's thumbnail. To regenerate it with the current library map while the dashboard runs:
@@ -137,6 +150,9 @@ docker compose run --rm --entrypoint chromium streamer --headless=new --no-sandb
 | `WIDTH` / `HEIGHT` | `2560` / `1440` | Output resolution. The 1920×1080 page is rendered at this size rather than scaled up, so it stays sharp |
 | `FPS` / `CAPTURE_FPS` | `30` / `30` | Output and capture frame rates. YouTube needs a steady 30 fps at a constant bitrate. A lower capture rate repeats frames, which saves some CPU but makes the animations stutter |
 | `VIDEO_BITRATE` / `BUFSIZE` / `PRESET` | `12000k` / `24000k` / `superfast` | Encoder settings, constant bitrate |
+| `YOUTUBE_API_KEY` / `YOUTUBE_VIDEO_ID` | | Reads the live's likes each minute for the like goal |
+| `SHORTS` / `SHORT_HOUR_UTC` / `SHORT_PRIVACY` | `1` / `18` / `public` | The daily Short: on or off, the hour it is made, and its privacy on YouTube |
+| `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET` / `YOUTUBE_REFRESH_TOKEN` | | Uploads the daily Short |
 | `PORT` | `8080` (`3000` in the single-container image) | Dashboard port |
 | `ANYPS5_REPO` | `boykopovar/AnyPS5` | Repository to follow (dashboard) |
 | `ANYPS5_PAGES` | `https://boykopovar.github.io/AnyPS5` | Where `progress.json` and `history.json` are published |
