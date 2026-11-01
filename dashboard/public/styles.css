@@ -172,6 +172,8 @@ h2 { font-size: 20px; font-weight: 700; white-space: nowrap; }
 .track-step.current { color: var(--ink); font-weight: 800; font-size: 28px; }
 .track-step.current::before { background: var(--good); box-shadow: 0 0 0 5px rgba(12, 163, 12, 0.25); }
 .spotlight-meta { font-size: 25px; color: var(--ink-2); }
+.chat-hint { margin-top: auto; padding: 14px 18px; border-radius: 12px; background: var(--surface-2); font-size: 24px; color: var(--ink-2); }
+.chat-hint strong { color: var(--ink); }
 .spotlight-others { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
 .other { min-width: 0; padding-top: 14px; border-top: 2px solid var(--grid); }
 .other-name { font-size: 25px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -214,6 +216,12 @@ h2 { font-size: 20px; font-weight: 700; white-space: nowrap; }
 .alert { display: grid; grid-template-columns: 76px 1fr auto; align-items: center; gap: 20px; padding: 18px 22px; background: #10233a; border: 2px solid var(--series-1); border-radius: 14px; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.65); animation: alert-in 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.1), alert-out 0.4s ease-in 8.6s forwards; }
 .alert.game { background: #122c1a; border-color: var(--good); }
 .alert.cta { background: #351518; border-color: var(--series-8); }
+.alert.answer { grid-template-columns: auto 1fr auto; background: #1d1b3a; border-color: var(--series-7); }
+.alert.answer img { width: 136px; height: 76px; border-radius: 10px; }
+.alert.discord { grid-template-columns: auto 1fr; background: #23274f; border-color: #5865f2; }
+.alert.discord img { width: 160px; height: 160px; padding: 0; border-radius: 10px; background: #fff; object-fit: contain; image-rendering: pixelated; }
+.alert-bar { height: 10px; margin-top: 9px; border-radius: 5px; background: rgba(255, 255, 255, 0.16); overflow: hidden; }
+.alert-bar > span { display: block; height: 100%; background: var(--series-7); }
 .alert img, .alert-icon { width: 76px; height: 76px; border-radius: 50%; object-fit: cover; background: var(--surface-2); }
 .alert-icon { display: flex; align-items: center; justify-content: center; font-size: 38px; }
 .alert-kicker { font-size: 18px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }

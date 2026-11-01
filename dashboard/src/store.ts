@@ -7,9 +7,10 @@ export interface Persisted {
   events: LiveEvent[];
   prReports: Record<string, PrReport | null>;
   releaseTag: string | null;
+  chatReminderAt: number | null;
 }
 
-const empty = (): Persisted => ({ snapshots: [], events: [], prReports: {}, releaseTag: null });
+const empty = (): Persisted => ({ snapshots: [], events: [], prReports: {}, releaseTag: null, chatReminderAt: null });
 
 export class Store {
   private readonly file: string;

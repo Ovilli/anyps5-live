@@ -68,6 +68,7 @@ export interface ChatAnswer {
   image?: string;
   icon?: string;
   pill?: string;
+  progress?: number;
 }
 
 export interface Snapshot {
@@ -133,5 +134,5 @@ export interface State {
     viewers: number | null;
     shorts: boolean;
   };
-  chat: { answers: ChatAnswer[] };
+  chat: { enabled: boolean; answers: ChatAnswer[] };
 }

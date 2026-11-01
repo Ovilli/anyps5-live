@@ -1,4 +1,4 @@
-import { answerCommand } from "./chat.js";
+import { CHAT_REMINDER, answerCommand } from "./chat.js";
 import { historyEvents, snapshotEvents } from "./events.js";
 import { STAGES, byPopularity, isRockstar, toThread, type DiscussionJson } from "./games.js";
 import { GitHub, getJson } from "./http.js";
@@ -14,6 +14,9 @@ const MINUTE = 60_000;
 const CHAT_COMMANDS = process.env.CHAT_COMMANDS === "1";
 const CHAT_POLL_SECONDS = Math.max(30, Number(process.env.CHAT_POLL_SECONDS) || 60);
 const CHAT_COOLDOWN_MS = 60_000;
+// A reminder of the commands, posted as the channel: 50 units each, so one an hour costs 1,200 a day. 0 turns it off.
+const CHAT_REMINDER_MINUTES = Math.max(0, Number(process.env.CHAT_REMINDER_MINUTES ?? 60) || 0);
+const TOKEN_URL = process.env.GOOGLE_TOKEN_URL ?? "https://oauth2.googleapis.com/token";
 const CHAT_ANSWERS_PER_READ = 3;
 
 interface ChatJson {
@@ -110,7 +113,7 @@ export class Collector {
     games: null,
     events: [],
     youtube: { likes: null, viewers: null, shorts: Boolean(process.env.YOUTUBE_REFRESH_TOKEN) },
-    chat: { answers: [] },
+    chat: { enabled: CHAT_COMMANDS && Boolean(process.env.YOUTUBE_API_KEY && process.env.YOUTUBE_VIDEO_ID), answers: [] },
   };
 
   // Reports on open PRs change with every push, so they are kept in memory and read again after a while.
@@ -431,7 +434,7 @@ export class Collector {
     });
   }
 
-  // Reads new chat messages and answers !game, !lib and !help on screen. Nothing is posted back to the chat.
+  // Reads new chat messages and answers their commands on screen. Nothing is posted back to the chat.
   async collectChat(): Promise<void> {
     const key = process.env.YOUTUBE_API_KEY, liveChatId = this.liveChatId;
     if (!key || !liveChatId) return;
@@ -455,12 +458,44 @@ export class Collector {
       for (const item of body.items) {
         if (answers.length >= CHAT_ANSWERS_PER_READ) break;
         if (item.snippet.type !== "textMessageEvent" || this.chat.asked.has(item.authorDetails.channelId)) continue;
-        const answer = answerCommand(item.id, item.snippet.displayMessage ?? "", item.authorDetails.displayName, this.threads, this.state.libraries?.all ?? []);
+        const answer = answerCommand(item.id, item.snippet.displayMessage ?? "", item.authorDetails.displayName, this.threads, this.state.libraries?.all ?? [], { progress: this.state.progress, topAuthors: this.state.github?.topAuthors ?? [] });
         if (!answer) continue;
         this.chat.asked.set(item.authorDetails.channelId, now);
         answers.push(answer);
       }
       this.state.chat.answers = [...this.state.chat.answers, ...answers].slice(-10);
+    });
+  }
+
+  // Waits a full interval after the first start, and keeps its time across restarts, so a deployment posts nothing.
+  async collectChatReminder(): Promise<void> {
+    const { YOUTUBE_CLIENT_ID: client, YOUTUBE_CLIENT_SECRET: secret, YOUTUBE_REFRESH_TOKEN: refresh } = process.env;
+    const liveChatId = this.liveChatId;
+    if (!client || !secret || !refresh || !liveChatId) return;
+    if (this.store.data.chatReminderAt === null) {
+      this.store.data.chatReminderAt = Date.now();
+      await this.store.save();
+      return;
+    }
+    if (Date.now() - this.store.data.chatReminderAt < CHAT_REMINDER_MINUTES * MINUTE) return;
+    // Saved before posting: a failure waits a full interval too, instead of spending quota every check.
+    this.store.data.chatReminderAt = Date.now();
+    await this.store.save();
+    await this.run("chatReminder", async () => {
+      const tokens = await fetch(TOKEN_URL, {
+        method: "POST",
+        body: new URLSearchParams({ client_id: client, client_secret: secret, refresh_token: refresh, grant_type: "refresh_token" }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!tokens.ok) throw new Error(`Google token ${tokens.status}`);
+      const { access_token: access } = (await tokens.json()) as { access_token: string };
+      const posted = await fetch("https://www.googleapis.com/youtube/v3/liveChat/messages?part=snippet", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${access}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ snippet: { liveChatId, type: "textMessageEvent", textMessageDetails: { messageText: CHAT_REMINDER } } }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!posted.ok) throw new Error(`YouTube chat post ${posted.status}`);
     });
   }
 
@@ -486,5 +521,6 @@ export class Collector {
     every(10, () => this.collectGames());
     every(1, () => this.collectYoutube());
     if (CHAT_COMMANDS) every(CHAT_POLL_SECONDS / 60, () => this.collectChat());
+    if (CHAT_COMMANDS && CHAT_REMINDER_MINUTES > 0) every(5, () => this.collectChatReminder());
   }
 }

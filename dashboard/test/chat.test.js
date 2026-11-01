@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { answerCommand } from "../dist/chat.js";
+import { CHAT_REMINDER, answerCommand } from "../dist/chat.js";
 
 const thread = (number, name, stage, replies, titleId = null) => ({ number, name, titleId, stage, replies, createdAt: "", updatedAt: "", cover: null });
 const threads = [
@@ -34,17 +34,70 @@ test("!game matches a title ID and part of a name, any case", () => {
 
 test("a miss suggests the closest name", () => {
   const answer = ask("!game playroom of astro bot");
-  assert.match(answer.title, /^No game matches/);
+  assert.match(answer.title, /^No game found/);
   assert.equal(answer.meta, "Closest: Astro's Playroom");
 });
 
 test("!lib matches the name or the label and shows the share done", () => {
   assert.equal(ask("!lib kernel").pill, "75%");
   assert.equal(ask("!lib gnm").title, "GPU driver");
-  assert.match(ask("!lib zzz").title, /^No library matches/);
+  assert.match(ask("!lib zzz").title, /^No library found/);
 });
 
 test("!help, and a command without a name, list the commands", () => {
   assert.match(ask("!help").title, /!game/);
   assert.match(ask("!game").title, /!lib/);
+});
+
+test("what a viewer types never reaches the screen", () => {
+  const answer = ask("!game buy cheap followers at spam.example");
+  assert.doesNotMatch(JSON.stringify(answer), /spam|followers/);
+  assert.doesNotMatch(JSON.stringify(ask("!lib spam.example")), /spam/);
+});
+
+test("!game understands short names and words in any order", () => {
+  const games = [thread(4, "Grand Theft Auto V", null, 25), thread(5, "Red Dead Redemption", "In game", 2)];
+  const short = (text) => answerCommand("m", text, "Viewer", games, []);
+  assert.equal(short("!game gta v").title, "Grand Theft Auto V");
+  assert.equal(short("!game rdr").title, "Red Dead Redemption");
+  assert.equal(short("!game redemption red").title, "Red Dead Redemption");
+});
+
+test("!game gta 6 answers honestly until a test thread exists", () => {
+  const answer = ask("!game gta 6");
+  assert.equal(answer.title, "GTA VI");
+  assert.equal(answer.pill, "0%");
+  const withThread = answerCommand("m", "!game gta vi", "Viewer", [thread(6, "Grand Theft Auto VI", "Menu", 3)], []);
+  assert.equal(withThread.pill, "Menu");
+});
+
+test("!discord gives the invite and its code", () => {
+  const answer = ask("!discord");
+  assert.equal(answer.kind, "discord");
+  assert.match(answer.meta, /discord\.gg\/BHFztBPUe/);
+  assert.equal(answer.image, "discord-qr.svg");
+});
+
+test("!next and !top read the live figures", () => {
+  const context = { progress: { done: 9134, week: { done: 2800 } }, topAuthors: [{ author: "ana", merged: 18 }, { author: "bo", merged: 3 }] };
+  const live = (text) => answerCommand("m", text, "Viewer", threads, libraries, context);
+  assert.equal(live("!next").title, "Next goal: 10,000 functions");
+  assert.match(live("!next").meta, /^866 to go · about 2 days/);
+  assert.equal(live("!top").title, "ana leads today");
+  assert.equal(live("!top").pill, "18 PRs");
+  assert.match(ask("!next").title, /loading/);
+});
+
+test("!random only picks games reaching gameplay", () => {
+  for (let turn = 0; turn < 20; turn += 1) assert.equal(ask("!random").pill, "In game");
+});
+
+test("!gamer and other near misses stay ignored", () => {
+  assert.equal(ask("!discordant"), null);
+  assert.equal(ask("!topic"), null);
+});
+
+test("the chat reminder fits YouTube's limit and names the Discord", () => {
+  assert.ok([...CHAT_REMINDER].length <= 200);
+  assert.match(CHAT_REMINDER, /https:\/\/discord\.gg\/BHFztBPUe/);
 });

@@ -1,4 +1,4 @@
-// Gets the refresh token for the daily Shorts upload. Run it on a computer with a browser:
+// Gets the refresh token for the daily Shorts upload and the chat reminder. Run it on a computer with a browser:
 //   node tools/youtube-auth.mjs <client id> <client secret>
 // The OAuth client is a "Desktop app" of a Google Cloud project with the YouTube Data API enabled.
 import { createServer } from "node:http";
@@ -14,7 +14,7 @@ consent.search = new URLSearchParams({
   client_id: clientId,
   redirect_uri: redirect,
   response_type: "code",
-  scope: "https://www.googleapis.com/auth/youtube.upload",
+  scope: "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.force-ssl",
   access_type: "offline",
   prompt: "consent",
 }).toString();
