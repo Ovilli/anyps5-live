@@ -59,6 +59,8 @@ test("!game understands short names and words in any order", () => {
   const games = [thread(4, "Grand Theft Auto V", null, 25), thread(5, "Red Dead Redemption", "In game", 2)];
   const short = (text) => answerCommand("m", text, "Viewer", games, []);
   assert.equal(short("!game gta v").title, "Grand Theft Auto V");
+  assert.equal(short("!game gta 5").title, "Grand Theft Auto V");
+  assert.equal(short("!game GTA5").title, "Grand Theft Auto V");
   assert.equal(short("!game rdr").title, "Red Dead Redemption");
   assert.equal(short("!game redemption red").title, "Red Dead Redemption");
 });
@@ -111,4 +113,12 @@ test("the stream reopens at once only during a burst with budget left", () => {
 test("the quota day follows California, not UTC", () => {
   assert.equal(quotaDay(Date.parse("2026-11-02T07:00:00Z")), "2026-11-01");
   assert.equal(quotaDay(Date.parse("2026-11-02T09:00:00Z")), "2026-11-02");
+});
+
+test("digits and Roman numerals match both ways", () => {
+  const games = [thread(7, "Final Fantasy VII", "In game", 1), thread(8, "Resident Evil 4", "Menu", 1)];
+  const ask2 = (text) => answerCommand("m", text, "Viewer", games, []);
+  assert.equal(ask2("!game final fantasy 7").title, "Final Fantasy VII");
+  assert.equal(ask2("!game ff7").title, "Final Fantasy VII");
+  assert.equal(ask2("!game resident evil iv").title, "Resident Evil 4");
 });

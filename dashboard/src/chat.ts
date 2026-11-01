@@ -15,19 +15,22 @@ export interface ChatContext {
 
 // What people type for the games they know by their short names.
 const ALIASES: [RegExp, string][] = [
-  [/^gta\b ?/, "grand theft auto "],
-  [/^rdr\b ?/, "red dead redemption "],
-  [/^mgs\b ?/, "metal gear solid "],
-  [/^gow\b ?/, "god of war "],
-  [/^ff\b ?/, "final fantasy "],
-  [/^re\b ?/, "resident evil "],
-  [/^cod\b ?/, "call of duty "],
-  [/^tlou\b ?/, "the last of us "],
+  [/^gta(?= |\d|$) ?/, "grand theft auto "],
+  [/^rdr(?= |\d|$) ?/, "red dead redemption "],
+  [/^mgs(?= |\d|$) ?/, "metal gear solid "],
+  [/^gow(?= |\d|$) ?/, "god of war "],
+  [/^ff(?= |\d|$) ?/, "final fantasy "],
+  [/^re(?= |\d|$) ?/, "resident evil "],
+  [/^cod(?= |\d|$) ?/, "call of duty "],
+  [/^tlou(?= |\d|$) ?/, "the last of us "],
 ];
 
 const number = new Intl.NumberFormat("en-US");
 // "Demon's Souls" and "demons souls" read the same: apostrophes go, everything else splits words.
-const normalize = (text: string): string => text.toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+// "GTA 5" and "GTA V" read the same too: Roman numerals become digits.
+const ROMAN: Record<string, string> = { ii: "2", iii: "3", iv: "4", v: "5", vi: "6", vii: "7", viii: "8", ix: "9", x: "10", xi: "11", xii: "12", xiii: "13", xiv: "14", xv: "15", xvi: "16" };
+const normalize = (text: string): string =>
+  text.toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\b[ivx]+\b/g, (word) => ROMAN[word] ?? word);
 const words = (text: string): string[] => normalize(text).split(" ").filter((word) => word.length > 2);
 
 const expand = (query: string): string => ALIASES.reduce((text, [alias, name]) => text.replace(alias, name), query).trim();
@@ -82,7 +85,7 @@ function gameAnswer(id: string, kicker: string, query: string, threads: GameThre
     .map((thread) => ({ thread, score: score(wanted, thread.name, thread.titleId ?? "") }))
     .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score || stage(b.thread) - stage(a.thread) || b.thread.replies - a.thread.replies)[0]?.thread;
-  if (/^grand theft auto (6|vi)\b/.test(wanted) && !found) return gtaVi(id, kicker);
+  if (/^grand theft auto 6\b/.test(wanted) && !found) return gtaVi(id, kicker);
   return found ? gameCard(id, kicker, found) : miss(id, kicker, "game", query, threads.map((thread) => thread.name));
 }
 
