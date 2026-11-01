@@ -64,6 +64,21 @@ function reportCount(body: string, kind: "implemented" | "declared"): number {
   return match ? Number(match[1]!.replace(/[\s+]/g, "").replace("−", "-")) : 0;
 }
 
+interface SearchPull {
+  user: { login: string; avatar_url: string };
+}
+
+function topAuthors(pulls: SearchPull[]): NonNullable<State["github"]>["topAuthors"] {
+  const authors = new Map<string, { author: string; avatar: string; merged: number }>();
+  for (const pull of pulls) {
+    if (pull.user.login.endsWith("[bot]")) continue;
+    const entry = authors.get(pull.user.login) ?? { author: pull.user.login, avatar: pull.user.avatar_url, merged: 0 };
+    entry.merged += 1;
+    authors.set(pull.user.login, entry);
+  }
+  return [...authors.values()].sort((a, b) => b.merged - a.merged).slice(0, 8);
+}
+
 export class Collector {
   readonly startedAt = new Date().toISOString();
   private history: HistoryPoint[] = [];
@@ -117,7 +132,6 @@ export class Collector {
       mergedPrs: [],
       openedPrs: [],
       topAuthors: [],
-      topWindow: 0,
       release: null,
       rateRemaining: null,
       authenticated: this.github.authenticated,
@@ -236,15 +250,6 @@ export class Collector {
         mergedAt: pull.merged_at!,
         report: this.store.data.prReports[pull.number] ?? null,
       }));
-      const authors = new Map<string, { author: string; avatar: string; merged: number }>();
-      for (const pull of merged) {
-        if (pull.user.login.endsWith("[bot]")) continue;
-        const entry = authors.get(pull.user.login) ?? { author: pull.user.login, avatar: pull.user.avatar_url, merged: 0 };
-        entry.merged += 1;
-        authors.set(pull.user.login, entry);
-      }
-      github.topAuthors = [...authors.values()].sort((a, b) => b.merged - a.merged).slice(0, 8);
-      github.topWindow = merged.length;
       const open = await this.github.get<PullJson[]>(`/repos/${REPO}/pulls?state=open&sort=created&direction=desc&per_page=20`);
       const opened = open.filter((pull) => !pull.draft).slice(0, 6);
       github.openedPrs = opened.map<OpenedPr>((pull) => ({
@@ -318,6 +323,20 @@ export class Collector {
     });
   }
 
+  // GitHub's search returns at most 1,000 results, far above a day of merges.
+  private async mergedSince(since: string): Promise<{ total: number; pulls: SearchPull[] }> {
+    const query = encodeURIComponent(`repo:${REPO} is:pr is:merged merged:>=${since}`);
+    const pulls: SearchPull[] = [];
+    let total = 0;
+    for (let page = 1; page <= 10; page += 1) {
+      const result = await this.github.get<{ total_count: number; items: SearchPull[] }>(`/search/issues?per_page=100&page=${page}&q=${query}`);
+      total = result.total_count;
+      pulls.push(...result.items);
+      if (result.items.length < 100 || pulls.length >= total) break;
+    }
+    return { total, pulls };
+  }
+
   async collectCounts(): Promise<void> {
     await this.run("search", async () => {
       const github = this.ensureGithub();
@@ -325,7 +344,9 @@ export class Collector {
         (await this.github.get<{ total_count: number }>(`/search/issues?per_page=1&q=${encodeURIComponent(`repo:${REPO} ${query}`)}`)).total_count;
       const since = new Date(Date.now() - 86_400_000).toISOString().slice(0, 19) + "Z";
       github.openPrs = await count("is:pr is:open");
-      github.merged24h = await count(`is:pr is:merged merged:>=${since}`);
+      const merged = await this.mergedSince(since);
+      github.merged24h = merged.total;
+      github.topAuthors = topAuthors(merged.pulls);
       github.merged7d = await count(`is:pr is:merged merged:>=${daysAgo(7)}`);
     });
   }

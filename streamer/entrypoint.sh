@@ -58,6 +58,7 @@ sleep "${WARMUP_SECONDS:-15}"
 
 shopt -s nullglob
 tracks=(/music/*.mp3 /music/*.m4a /music/*.ogg /music/*.flac /music/*.wav)
+audio_filter=()
 if [ ${#tracks[@]} -gt 0 ]; then
   # The concat demuxer cannot seek back to loop (-stream_loop stops the audio at the end of the list),
   # so the list is written out long enough for weeks, reshuffled on every round.
@@ -73,7 +74,8 @@ if [ ${#tracks[@]} -gt 0 ]; then
         }
     }' > /tmp/playlist.txt
   audio=(-f concat -safe 0 -i /tmp/playlist.txt)
-  log "Audio: ${#tracks[@]} track(s) from /music, shuffled"
+  audio_filter=(-af loudnorm=I=-22:TP=-2:LRA=11)
+  log "Audio: ${#tracks[@]} track(s) from /music, shuffled, at an even loudness"
 else
   audio=(-f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100)
   log "Audio: silent track (add files to ./music for a soundtrack)"
@@ -92,7 +94,7 @@ encode() {
     -colorspace bt709 -color_primaries bt709 -color_trc bt709 \
     -c:v libx264 -preset "$PRESET" -b:v "$VIDEO_BITRATE" -maxrate "$VIDEO_BITRATE" -bufsize "$BUFSIZE" -x264-params nal-hrd=cbr \
     -g "$gop" -keyint_min "$gop" -sc_threshold 0 \
-    -c:a aac -b:a "$AUDIO_BITRATE" -ar 44100 -ac 2 \
+    "${audio_filter[@]}" -c:a aac -b:a "$AUDIO_BITRATE" -ar 44100 -ac 2 \
     "${duration[@]}" -f "$FORMAT" "$OUTPUT"
 }
 

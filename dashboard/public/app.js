@@ -126,7 +126,7 @@ function renderPrs(github) {
 
 function renderPrList(list, prs, timeOf) {
   const known = new Set([...list.querySelectorAll(".pr")].map((node) => node.dataset.number));
-  list.innerHTML = prs
+  const html = prs
     .slice(0, 3)
     .map((pr) => {
       const fresh = known.size && !known.has(String(pr.number)) ? " fresh" : "";
@@ -137,6 +137,11 @@ function renderPrList(list, prs, timeOf) {
       return `<li class="pr${fresh}" data-number="${pr.number}"><img class="avatar" src="${avatar(pr.avatar, 88)}" alt=""><div class="pr-text"><div class="pr-title">${escape(pr.title)}</div><div class="pr-meta">#${pr.number} · ${escape(pr.author)} · ${ago(timeOf(pr))}</div></div>${pill}</li>`;
     })
     .join("");
+  // Rewriting an unchanged list makes its avatars flicker on air.
+  if (list.dataset.html !== html) {
+    list.dataset.html = html;
+    list.innerHTML = html;
+  }
 }
 
 // "Exports discovered" lines say the total grew, which is noise next to what got done: they only fill up a quiet list.
@@ -240,9 +245,9 @@ function renderContributors() {
   const github = latest?.github;
   if (!github?.topAuthors?.length) return false;
   $("scene-contributors").innerHTML = `<div class="scene-body">
-    <div><div class="scene-tag">Who is building it</div><h2 class="scene-title">Most merged PRs</h2></div>
+    <div><div class="scene-tag">Who is building it</div><h2 class="scene-title">Most merged PRs today</h2></div>
     <div class="authors">${github.topAuthors.map((author) => `<div class="author"><img src="${escape(avatar(author.avatar, 220))}" alt=""><div class="author-text"><div class="author-name">${escape(author.author)}</div><div class="author-count">${fmt(author.merged)} PR${author.merged > 1 ? "s" : ""}</div></div></div>`).join("")}</div>
-    <div class="scene-note">Across the latest ${fmt(github.topWindow)} merged PRs · ${fmt(github.merged24h)} merged in the last 24 hours</div>
+    <div class="scene-note">${fmt(github.merged24h)} PRs merged in the last 24 hours</div>
   </div>`;
   return true;
 }
@@ -296,15 +301,22 @@ const SCENES = {
 const ROTATION = ["dashboard", "games", "dashboard", "milestone", "dashboard", "games", "dashboard", "contributors", "dashboard", "games", "dashboard", "movers"];
 const params = new URLSearchParams(location.search);
 const pinnedScene = SCENES[params.get("scene")] ? params.get("scene") : null;
+const TRANSITION_MS = 500, PREPARE_SECONDS = 3;
 let rotationIndex = 0;
 let sceneEnds = 0;
 let shownScene = "dashboard";
+let prepared = null;
 
 function showScene(name) {
-  $(SCENES[shownScene].node).classList.remove("active");
-  $(SCENES[name].node).classList.add("active");
+  const previous = $(SCENES[shownScene].node), node = $(SCENES[name].node);
+  node.classList.add("entering");
   shownScene = name;
   sceneEnds = Date.now() + SCENES[name].seconds * 1000;
+  setTimeout(() => {
+    previous.classList.remove("active");
+    node.classList.add("active");
+    node.classList.remove("entering");
+  }, TRANSITION_MS);
 }
 
 function nextSceneName() {
@@ -315,6 +327,20 @@ function nextSceneName() {
   return { name: "dashboard", index: 0 };
 }
 
+// The scene is filled and its picture decoded seconds ahead, so the slide itself has nothing else to do.
+// A scene whose data is not there yet is skipped.
+function prepareNext() {
+  for (let tries = 0; tries < ROTATION.length; tries += 1) {
+    const next = nextSceneName();
+    if (SCENES[next.name].render()) {
+      $(SCENES[next.name].node).querySelector("img")?.decode().catch(() => {});
+      return next;
+    }
+    rotationIndex = next.index;
+  }
+  return null;
+}
+
 function tickScenes() {
   if (pinnedScene) {
     if (shownScene !== pinnedScene && latest && SCENES[pinnedScene].render()) showScene(pinnedScene);
@@ -322,19 +348,18 @@ function tickScenes() {
   }
   if (!sceneEnds) sceneEnds = Date.now() + DASHBOARD_SECONDS * 1000;
   let left = Math.ceil((sceneEnds - Date.now()) / 1000);
+  if (left <= PREPARE_SECONDS && !prepared && latest) prepared = prepareNext();
   if (left <= 0) {
-    // A scene whose data is not there yet is skipped.
-    for (let tries = 0; tries < ROTATION.length; tries += 1) {
-      const next = nextSceneName();
-      rotationIndex = next.index;
-      if (SCENES[next.name].render()) {
-        showScene(next.name);
-        break;
-      }
+    if (prepared) {
+      rotationIndex = prepared.index;
+      showScene(prepared.name);
+      prepared = null;
+    } else {
+      sceneEnds = Date.now() + SCENES[shownScene].seconds * 1000;
     }
     left = SCENES[shownScene].seconds;
   }
-  const next = SCENES[nextSceneName().name];
+  const next = SCENES[prepared?.name ?? nextSceneName().name];
   $("next-up").innerHTML = `Next: <strong>${next.title}</strong> in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
 }
 
@@ -393,10 +418,7 @@ function detectChanges(state) {
     seen[key] = new Set([...(known ?? []), ...items.map(id)]);
     return known ? items.filter((item) => !known.has(id(item))) : [];
   };
-  if (state.github) fresh("prs", state.github.mergedPrs, (pr) => pr.number).reverse().forEach((pr) => pushAlert(prAlert(pr)));
-  if (state.games) fresh("games", state.games.recent, (game) => game.number).filter((game) => Date.now() - Date.parse(game.createdAt) < 3_600_000).reverse().forEach((game) => pushAlert(gameAlert(game)));
-  const notable = state.events.filter((event) => event.kind === "complete" || event.kind === "release");
-  fresh("events", notable, (event) => `${event.kind}|${event.title}`).reverse().forEach((event) => pushAlert({ kicker: event.kind === "release" ? "New release" : "Library finished", title: eventTitle(event.title), meta: event.detail ?? "", icon: event.kind === "release" ? "🚀" : "✅" }));
+  // First, so that alerts arriving with a milestone wait for it instead of playing behind it.
   if (state.progress) {
     const before = seen.done;
     seen.done = state.progress.done;
@@ -404,6 +426,10 @@ function detectChanges(state) {
       celebrate("Milestone reached", fmt(Math.floor(state.progress.done / MILESTONE_STEP) * MILESTONE_STEP), "PS5 system functions implemented");
     }
   }
+  if (state.github) fresh("prs", state.github.mergedPrs, (pr) => pr.number).reverse().forEach((pr) => pushAlert(prAlert(pr)));
+  if (state.games) fresh("games", state.games.recent, (game) => game.number).filter((game) => Date.now() - Date.parse(game.createdAt) < 3_600_000).reverse().forEach((game) => pushAlert(gameAlert(game)));
+  const notable = state.events.filter((event) => event.kind === "complete" || event.kind === "release");
+  fresh("events", notable, (event) => `${event.kind}|${event.title}`).reverse().forEach((event) => pushAlert({ kicker: event.kind === "release" ? "New release" : "Library finished", title: eventTitle(event.title), meta: event.detail ?? "", icon: event.kind === "release" ? "🚀" : "✅" }));
 }
 
 function runDemo(kind) {

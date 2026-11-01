@@ -34,12 +34,15 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* The streamer's window is wider than the 1920x1080 page: overlays anchor to the page, not to the window. */
+body { position: relative; }
+
 h1, h2, ol { margin: 0; padding: 0; }
 ol { list-style: none; }
 
 .screen {
   display: grid;
-  grid-template-rows: 56px 936px;
+  grid-template-rows: 56px 952px;
   gap: 16px;
   width: 1920px;
   height: 1080px;
@@ -47,9 +50,13 @@ ol { list-style: none; }
 }
 
 /* Scenes: the header stays, the area below it fades from one scene to the next. */
-.stage-area { position: relative; min-height: 0; }
-.scene { position: absolute; inset: 0; opacity: 0; transition: opacity 0.6s ease; pointer-events: none; }
-.scene.active { opacity: 1; }
+.stage-area { position: relative; min-height: 0; overflow: hidden; }
+/* Each scene is opaque and keeps its own layer: only the one coming in fades, over the one going out.
+   A fade, because the software renderer draws about 20 frames a second here, and a slide visibly judders at that rate. */
+.scene { position: absolute; inset: 0; background: var(--page); opacity: 0.001; will-change: opacity; pointer-events: none; }
+.scene.active { opacity: 1; z-index: 1; }
+.scene.entering { opacity: 1; z-index: 2; animation: scene-in 0.5s ease-in-out both; }
+@keyframes scene-in { from { opacity: 0; } to { opacity: 1; } }
 .dashboard { display: grid; grid-template-rows: 164px 464px 292px; gap: 16px; }
 .scene-tag { font-size: 24px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--series-1); }
 .scene-title { font-size: 68px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; margin: 8px 0 0; }
@@ -198,7 +205,7 @@ h2 { font-size: 20px; font-weight: 700; white-space: nowrap; }
 .gain-date { font-size: 16px; color: var(--muted); white-space: nowrap; }
 
 /* Alerts */
-.alerts { position: fixed; right: 28px; bottom: 24px; width: 760px; z-index: 5; }
+.alerts { position: absolute; right: 28px; bottom: 24px; width: 760px; z-index: 5; }
 .alert { display: grid; grid-template-columns: 76px 1fr auto; align-items: center; gap: 20px; padding: 18px 22px; background: #10233a; border: 2px solid var(--series-1); border-radius: 14px; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.65); animation: alert-in 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.1), alert-out 0.4s ease-in 8.6s forwards; }
 .alert.game { background: #122c1a; border-color: var(--good); }
 .alert img, .alert-icon { width: 76px; height: 76px; border-radius: 50%; object-fit: cover; background: var(--surface-2); }
@@ -212,7 +219,7 @@ h2 { font-size: 20px; font-weight: 700; white-space: nowrap; }
 @keyframes alert-out { to { transform: translateX(110%); } }
 
 /* Milestone celebration */
-.takeover { position: fixed; inset: 0; z-index: 10; display: none; align-items: center; justify-content: center; text-align: center; background: #081220; overflow: hidden; }
+.takeover { position: absolute; inset: 0; z-index: 10; display: none; align-items: center; justify-content: center; text-align: center; background: #081220; overflow: hidden; }
 .takeover.show { display: flex; }
 .takeover-kicker { font-size: 44px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--series-1); }
 .takeover-value { font-size: 300px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; animation: pop 0.7s cubic-bezier(0.2, 1.4, 0.4, 1); }

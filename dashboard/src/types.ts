@@ -101,7 +101,6 @@ export interface State {
     mergedPrs: MergedPr[];
     openedPrs: OpenedPr[];
     topAuthors: { author: string; avatar: string; merged: number }[];
-    topWindow: number;
     release: { tag: string; publishedAt: string | null } | null;
     rateRemaining: number | null;
     authenticated: boolean;

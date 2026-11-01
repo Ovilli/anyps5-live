@@ -115,7 +115,7 @@ docker run -d --restart unless-stopped -e YOUTUBE_STREAM_KEY=... -v anyps5-data:
 | Stop everything | `docker compose down` (the snapshots stay in the volume) |
 | Current state as JSON | `curl -s http://127.0.0.1:8080/api/state` |
 
-**Soundtrack**: YouTube requires an audio track, so the streamer sends silence by default. Put `.mp3`, `.m4a`, `.ogg`, `.flac` or `.wav` files in `./music` to play them in shuffled order instead, then restart the streamer; use only music you have the rights to stream. In single-container mode, mount the folder on `/music`.
+**Soundtrack**: YouTube requires an audio track, so the streamer sends silence by default. Put `.mp3`, `.m4a`, `.ogg`, `.flac` or `.wav` files in `./music` to play them in shuffled order instead, then restart the streamer; their loudness is evened out. Use only music you have the rights to stream. In single-container mode, mount the folder on `/music`.
 
 ## Thumbnail
 
