@@ -38,6 +38,15 @@ export interface MergedPr {
   report: PrReport | null;
 }
 
+export interface OpenedPr {
+  number: number;
+  title: string;
+  author: string;
+  avatar: string;
+  createdAt: string;
+  report: PrReport | null;
+}
+
 export interface Snapshot {
   date: string;
   libraries: Record<string, [number, number]>;
@@ -79,6 +88,7 @@ export interface State {
     merged24h: number | null;
     merged7d: number | null;
     mergedPrs: MergedPr[];
+    openedPrs: OpenedPr[];
     release: { tag: string; publishedAt: string | null } | null;
     rateRemaining: number | null;
     authenticated: boolean;

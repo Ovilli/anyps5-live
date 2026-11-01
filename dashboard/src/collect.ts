@@ -1,7 +1,7 @@
 import { gameEvents, historyEvents, snapshotEvents, describeGameChange } from "./events.js";
 import { GitHub, getJson } from "./http.js";
 import type { Store } from "./store.js";
-import type { HistoryPoint, LiveEvent, MergedPr, PrReport, Snapshot, State } from "./types.js";
+import type { HistoryPoint, LiveEvent, MergedPr, OpenedPr, PrReport, Snapshot, State } from "./types.js";
 
 const REPO = process.env.ANYPS5_REPO ?? "boykopovar/AnyPS5";
 const PAGES = (process.env.ANYPS5_PAGES ?? "https://boykopovar.github.io/AnyPS5").replace(/\/$/, "");
@@ -24,6 +24,8 @@ interface PullJson {
   number: number;
   title: string;
   merged_at: string | null;
+  created_at: string;
+  draft?: boolean;
   user: { login: string; avatar_url: string };
 }
 
@@ -68,6 +70,9 @@ export class Collector {
     events: [],
   };
 
+  // Reports on open PRs change with every push, so they are kept in memory and read again after a while.
+  private readonly openReports = new Map<number, { at: number; report: PrReport | null }>();
+
   constructor(private readonly store: Store, private readonly github: GitHub) {}
 
   get ready(): boolean {
@@ -99,6 +104,7 @@ export class Collector {
       merged24h: null,
       merged7d: null,
       mergedPrs: [],
+      openedPrs: [],
       release: null,
       rateRemaining: null,
       authenticated: this.github.authenticated,
@@ -217,9 +223,39 @@ export class Collector {
         mergedAt: pull.merged_at!,
         report: this.store.data.prReports[pull.number] ?? null,
       }));
+      const open = await this.github.get<PullJson[]>(`/repos/${REPO}/pulls?state=open&sort=created&direction=desc&per_page=20`);
+      const opened = open.filter((pull) => !pull.draft).slice(0, 6);
+      github.openedPrs = opened.map<OpenedPr>((pull) => ({
+        number: pull.number,
+        title: pull.title,
+        author: pull.user.login,
+        avatar: pull.user.avatar_url,
+        createdAt: pull.created_at,
+        report: this.openReports.get(pull.number)?.report ?? null,
+      }));
       github.rateRemaining = this.github.rateRemaining;
       await this.collectReports(merged.slice(0, 14));
+      await this.collectOpenReports(opened);
     });
+  }
+
+  private async readReport(number: number): Promise<PrReport | null> {
+    const comments = await this.github.get<{ body: string }[]>(`/repos/${REPO}/issues/${number}/comments?per_page=100`);
+    const comment = comments.find((item) => item.body.includes("<!-- progress-report -->"));
+    return comment ? { implemented: reportCount(comment.body, "implemented"), declared: reportCount(comment.body, "declared") } : null;
+  }
+
+  private async collectOpenReports(opened: PullJson[]): Promise<void> {
+    if (!this.github.authenticated) return;
+    const shown = new Set(opened.map((pull) => pull.number));
+    for (const number of this.openReports.keys()) if (!shown.has(number)) this.openReports.delete(number);
+    for (const pull of opened) {
+      const cached = this.openReports.get(pull.number);
+      if (cached && Date.now() - cached.at < 20 * MINUTE) continue;
+      if (this.github.rateRemaining !== null && this.github.rateRemaining < 50) break;
+      this.openReports.set(pull.number, { at: Date.now(), report: await this.readReport(pull.number) });
+    }
+    for (const pr of this.ensureGithub().openedPrs) pr.report = this.openReports.get(pr.number)?.report ?? null;
   }
 
   private async collectReports(merged: PullJson[]): Promise<void> {
@@ -227,14 +263,8 @@ export class Collector {
     const missing = merged.filter((pull) => !(pull.number in this.store.data.prReports)).slice(0, budget);
     for (const pull of missing) {
       if (this.github.rateRemaining !== null && this.github.rateRemaining < 10) break;
-      const comments = await this.github.get<{ body: string }[]>(`/repos/${REPO}/issues/${pull.number}/comments?per_page=100`);
-      const comment = comments.find((item) => item.body.includes("<!-- progress-report -->"));
-      let report: PrReport | null = null;
-      if (comment) {
-        report = { implemented: reportCount(comment.body, "implemented"), declared: reportCount(comment.body, "declared") };
-      } else if (Date.now() - Date.parse(pull.merged_at!) < 2 * 60 * MINUTE) {
-        continue;
-      }
+      const report = await this.readReport(pull.number);
+      if (!report && Date.now() - Date.parse(pull.merged_at!) < 2 * 60 * MINUTE) continue;
       this.store.data.prReports[pull.number] = report;
     }
     const keys = Object.keys(this.store.data.prReports).map(Number).sort((a, b) => b - a);
