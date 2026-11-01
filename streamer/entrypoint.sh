@@ -59,10 +59,21 @@ sleep "${WARMUP_SECONDS:-15}"
 shopt -s nullglob
 tracks=(/music/*.mp3 /music/*.m4a /music/*.ogg /music/*.flac /music/*.wav)
 if [ ${#tracks[@]} -gt 0 ]; then
-  : > /tmp/playlist.txt
-  for track in "${tracks[@]}"; do printf "file '%s'\n" "$track" >> /tmp/playlist.txt; done
-  audio=(-stream_loop -1 -f concat -safe 0 -i /tmp/playlist.txt)
-  log "Audio: ${#tracks[@]} track(s) from /music, looped"
+  # The concat demuxer cannot seek back to loop (-stream_loop stops the audio at the end of the list),
+  # so the list is written out long enough for weeks, reshuffled on every round.
+  printf '%s\n' "${tracks[@]}" | awk -v q="'" -v entries=20000 '
+    BEGIN { srand() }
+    { gsub(q, q "\\\\" q q); list[NR] = $0 }
+    END {
+      for (written = 0; written < entries; written += NR)
+        for (i = NR; i >= 1; i--) {
+          j = int(rand() * i) + 1
+          track = list[i]; list[i] = list[j]; list[j] = track
+          print "file " q list[i] q
+        }
+    }' > /tmp/playlist.txt
+  audio=(-f concat -safe 0 -i /tmp/playlist.txt)
+  log "Audio: ${#tracks[@]} track(s) from /music, shuffled"
 else
   audio=(-f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100)
   log "Audio: silent track (add files to ./music for a soundtrack)"
