@@ -242,6 +242,7 @@ function renderSpotlight() {
         <div><div class="scene-tag">Game spotlight</div><h2 class="scene-title">${escape(game.name)}</h2></div>
         <div class="track">${steps}</div>
         <div class="spotlight-meta">Report updated ${ago(game.updatedAt)}${replies}</div>
+        ${latest?.chat?.enabled ? `<div class="chat-hint">💬 Type <strong>!game</strong> and a name to check your game</div>` : ""}
       </div>
     </div>
     <div class="spotlight-others">${others}</div>
@@ -374,12 +375,18 @@ function tickScenes() {
 // Alerts: new merged PRs, new game reports and finished libraries slide in one at a time.
 const ALERT_MS = 9000, ALERT_GAP_MS = 1500, ALERT_QUEUE = 6;
 const alertQueue = [];
-const seen = { prs: null, games: null, events: null, done: null, likes: null };
+const seen = { prs: null, games: null, events: null, chat: null, done: null, likes: null };
 let alertBusy = false;
 
+// A viewer waiting for an answer goes before the automatic cards, and is the last to be dropped.
 function pushAlert(alert) {
-  alertQueue.push(alert);
-  while (alertQueue.length > ALERT_QUEUE) alertQueue.shift();
+  const at = alert.priority ? alertQueue.findIndex((queued) => !queued.priority) : -1;
+  if (at >= 0) alertQueue.splice(at, 0, alert);
+  else alertQueue.push(alert);
+  while (alertQueue.length > ALERT_QUEUE) {
+    const drop = alertQueue.findLastIndex((queued) => !queued.priority);
+    alertQueue.splice(drop >= 0 ? drop : 0, 1);
+  }
   playAlerts();
 }
 
@@ -388,7 +395,7 @@ function playAlerts() {
   alertBusy = true;
   const alert = alertQueue.shift();
   const image = alert.image ? `<img src="${escape(alert.image)}" alt="">` : `<div class="alert-icon">${alert.icon ?? "★"}</div>`;
-  $("alerts").innerHTML = `<div class="alert ${alert.kind ?? ""}">${image}<div class="alert-text"><div class="alert-kicker">${escape(alert.kicker)}</div><div class="alert-title">${escape(alert.title)}</div>${alert.meta ? `<div class="alert-meta">${escape(alert.meta)}</div>` : ""}</div>${alert.pill ? `<span class="pill">${escape(alert.pill)}</span>` : "<span></span>"}</div>`;
+  $("alerts").innerHTML = `<div class="alert ${alert.kind ?? ""}">${image}<div class="alert-text"><div class="alert-kicker">${escape(alert.kicker)}</div><div class="alert-title">${escape(alert.title)}</div>${alert.meta ? `<div class="alert-meta">${escape(alert.meta)}</div>` : ""}${typeof alert.progress === "number" ? `<div class="alert-bar"><span style="width:${Math.min(100, alert.progress).toFixed(1)}%"></span></div>` : ""}</div>${alert.pill ? `<span class="pill">${escape(alert.pill)}</span>` : "<span></span>"}</div>`;
   setTimeout(() => {
     $("alerts").innerHTML = "";
     setTimeout(() => {
@@ -440,10 +447,12 @@ function detectChanges(state) {
   if (state.games) fresh("games", state.games.recent, (game) => game.number).filter((game) => Date.now() - Date.parse(game.createdAt) < 3_600_000).reverse().forEach((game) => pushAlert(gameAlert(game)));
   const notable = state.events.filter((event) => event.kind === "complete" || event.kind === "release");
   fresh("events", notable, (event) => `${event.kind}|${event.title}`).reverse().forEach((event) => pushAlert({ kicker: event.kind === "release" ? "New release" : "Library finished", title: eventTitle(event.title), meta: event.detail ?? "", icon: event.kind === "release" ? "🚀" : "✅" }));
+  // Chat commands arrive as ready-made cards, oldest first.
+  if (state.chat) fresh("chat", state.chat.answers, (answer) => answer.id).forEach((answer) => pushAlert({ ...answer, priority: true }));
 }
 
 // Calls to action: tied to good news when there is some, and a light reminder otherwise.
-const CTA_EVERY_MS = 4 * 60_000;
+const CTA_EVERY_MS = 3 * 60_000;
 let ctaTurn = 0;
 
 function likeGoal(likes) {
@@ -462,9 +471,19 @@ function subscribeCta() {
   return { kind: "cta", kicker: "Stay in the loop", title: shorts ? "Subscribe for a daily AnyPS5 Short" : "Subscribe to follow AnyPS5's progress", meta: shorts ? "The day's progress, in 30 seconds" : "", icon: "🔔" };
 }
 
+function chatCta() {
+  return { kind: "cta", kicker: "Ask the stream", title: "Type !game followed by a game's name", meta: "The answer shows up here. !help lists the rest", icon: "💬" };
+}
+
+function discordCta() {
+  return { kind: "discord", kicker: "Talk to the people building it", title: "Join the AnyPS5 Discord", meta: "discord.gg/BHFztBPUe · scan the code", image: "discord-qr.svg" };
+}
+
 function remindCta() {
   if (document.hidden) return;
-  pushAlert(ctaTurn % 2 === 0 ? likeCta("Hit like to support the stream") : subscribeCta());
+  const cards = [() => likeCta("Hit like to support the stream"), subscribeCta, discordCta];
+  if (latest?.chat?.enabled) cards.splice(1, 0, chatCta);
+  pushAlert(cards[ctaTurn % cards.length]());
   ctaTurn += 1;
 }
 
@@ -492,6 +511,14 @@ function runDemo(kind) {
   if (kind === "alert" && github?.mergedPrs?.[0]) {
     pushAlert(prAlert({ ...github.mergedPrs[0], report: { implemented: 12, declared: 0 } }));
     if (latest.games?.recent?.[0]) pushAlert(gameAlert(latest.games.recent[0]));
+  }
+  if (kind === "chat") {
+    const game = latest?.games?.highlights?.[0];
+    if (game) pushAlert({ kind: "answer game", kicker: "!game · asked by Viewer", title: game.name, meta: `${game.titleId ?? ""} · ${fmt(game.replies)} replies`, image: game.cover, pill: game.stage, progress: 100 });
+    pushAlert({ kind: "discord", kicker: "!discord · asked by Viewer", title: "Join the AnyPS5 Discord", meta: "discord.gg/BHFztBPUe · scan the code", image: "discord-qr.svg" });
+    const library = latest?.libraries?.all?.[0];
+    if (library) pushAlert({ kind: "answer", kicker: "!lib · asked by Viewer", title: library.label, meta: `${fmt(library.done)} / ${fmt(library.total)} functions implemented`, icon: "📚", pill: `${Math.floor((library.done / library.total) * 100)}%`, progress: (library.done / library.total) * 100 });
+    pushAlert({ kind: "cta", kicker: "!help · asked by Viewer", title: "!game  !lib  !next  !top  !random  !discord", meta: "Try !game elden ring: the answer shows up here", icon: "💬" });
   }
   if (kind === "milestone") celebrate("Milestone reached", "9,000", "PS5 system functions implemented");
 }
