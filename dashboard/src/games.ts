@@ -18,6 +18,8 @@ export function byPopularity(a: GameThread, b: GameThread): number {
   return Number(WELL_KNOWN.test(b.name)) - Number(WELL_KNOWN.test(a.name)) || b.replies - a.replies;
 }
 
+export const isRockstar = (thread: GameThread): boolean => /grand theft auto|\bgta\b|red dead/i.test(thread.name);
+
 export interface DiscussionJson {
   number: number;
   title: string;

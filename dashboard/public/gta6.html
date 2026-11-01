@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1920, height=1080">
+  <title>GTA VI port tracker</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="gta6.css">
+</head>
+<body>
+  <main class="gta">
+    <header class="gta-top">
+      <h1>GTA VI <span class="thin">port tracker</span></h1>
+      <div class="gta-live"><span class="dot"></span>LIVE · unofficial fan tracker</div>
+    </header>
+
+    <section class="gta-hero">
+      <div class="gta-port">
+        <div class="gta-label">PC port progress</div>
+        <div class="gta-percent" id="port-percent">0%</div>
+        <div class="gta-bar"><span id="port-bar"></span></div>
+        <div class="gta-status" id="port-status">Not released yet</div>
+        <div class="gta-note" id="port-note">The game is not out, so there is nothing to test on AnyPS5 yet.</div>
+      </div>
+      <div class="gta-clock">
+        <div class="gta-label" id="clock-label">Console release in</div>
+        <div class="gta-count" id="count"></div>
+        <div class="gta-note" id="clock-note">Official date: November 19, 2026, on PS5 and Xbox Series X|S. No PC version has been announced.</div>
+      </div>
+    </section>
+
+    <section class="gta-grid">
+      <article class="gta-panel">
+        <h2>Is AnyPS5 getting ready?</h2>
+        <p class="gta-intro">AnyPS5 converts PS5 games to run natively on PC, with no emulator. Every function it rebuilds helps every future game.</p>
+        <div class="gta-stats">
+          <div><strong id="stat-done">—</strong><span>PS5 functions rebuilt</span><em id="stat-gain"></em></div>
+          <div><strong id="stat-games">—</strong><span>games reach gameplay</span></div>
+          <div><strong id="stat-merged">—</strong><span>code changes in 24 h</span></div>
+        </div>
+      </article>
+      <article class="gta-panel">
+        <h2>Rockstar games on AnyPS5 today</h2>
+        <ol class="gta-games" id="games"></ol>
+      </article>
+    </section>
+
+    <footer class="gta-foot">
+      <div class="gta-latest" id="latest"></div>
+      <div class="gta-cta" id="cta"></div>
+    </footer>
+    <div class="gta-legal">Not affiliated with Rockstar Games, Take-Two, Sony or the AnyPS5 maintainers. No game or download is provided.</div>
+  </main>
+  <script src="gta6.js"></script>
+</body>
+</html>

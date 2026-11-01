@@ -1,5 +1,5 @@
 import { historyEvents, snapshotEvents } from "./events.js";
-import { STAGES, byPopularity, toThread, type DiscussionJson } from "./games.js";
+import { STAGES, byPopularity, isRockstar, toThread, type DiscussionJson } from "./games.js";
 import { GitHub, getJson } from "./http.js";
 import type { Store } from "./store.js";
 import type { HistoryPoint, LiveEvent, MergedPr, OpenedPr, PrReport, Snapshot, State } from "./types.js";
@@ -389,6 +389,7 @@ export class Collector {
         stages: STAGES.map((stage) => ({ name: stage, count: count(stage) })),
         recent: threads.slice(0, 24),
         highlights: threads.filter((thread) => thread.stage === "In game" && thread.cover).sort(byPopularity).slice(0, 24),
+        rockstar: threads.filter(isRockstar).sort((a, b) => b.replies - a.replies),
       };
     });
   }
