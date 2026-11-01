@@ -40,6 +40,19 @@ export class GitHub {
     if (etag) this.cache.set(url, { etag, body });
     return body;
   }
+
+  async graphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
+    const response = await fetch("https://api.github.com/graphql", {
+      method: "POST",
+      headers: { "User-Agent": USER_AGENT, "Content-Type": "application/json", Authorization: `Bearer ${this.token}` },
+      body: JSON.stringify({ query, variables }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!response.ok) throw new Error(`GitHub GraphQL ${response.status}`);
+    const result = (await response.json()) as { data?: T; errors?: { message: string }[] };
+    if (result.errors?.length || !result.data) throw new Error(`GitHub GraphQL: ${result.errors?.[0]?.message ?? "no data"}`);
+    return result.data;
+  }
 }
 
 export async function getJson<T>(url: string): Promise<T> {

@@ -36,8 +36,8 @@ function tickClock() {
 function renderKpis(state) {
   const progress = state.progress;
   if (progress) {
-    $("hero-percent").textContent = pct(progress.percent);
-    $("hero-count").textContent = `${fmt(progress.done)} / ${fmt(progress.total)} functions`;
+    countTo($("hero-done"), progress.done);
+    $("hero-count").textContent = `${pct(progress.percent)} of ${fmt(progress.total)} found so far`;
     const parts = [];
     if (progress.day) parts.push(`<span class="up">${signed(progress.day.done)}</span> in 24h`);
     if (progress.week) parts.push(`<span class="up">${signed(progress.week.done)}</span> in 7 days`);
@@ -53,9 +53,27 @@ function renderKpis(state) {
     $("kpi-release").textContent = github.release ? `latest release ${github.release.tag}` : "";
   }
   if (state.games) {
-    $("kpi-playable").textContent = fmt(state.games.playable);
-    $("kpi-menus").textContent = `${fmt(state.games.menus)} reach menus`;
+    $("kpi-ingame").textContent = fmt(state.games.inGame);
+    $("kpi-games-note").textContent = `of ${fmt(state.games.tracked)} reported`;
   }
+}
+
+// Rolls a number up to its new value, so a change on screen is seen and not just swapped in.
+function countTo(node, target) {
+  const from = Number(node.dataset.value);
+  node.dataset.value = target;
+  if (!Number.isFinite(from) || from === target || !node.dataset.counted) {
+    node.dataset.counted = "1";
+    node.textContent = fmt(target);
+    return;
+  }
+  const started = performance.now();
+  const step = (now) => {
+    const progress = Math.min(1, (now - started) / 2000);
+    node.textContent = fmt(Math.round(from + (target - from) * progress));
+    if (progress < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 function niceMax(value) {
@@ -121,18 +139,23 @@ function renderPrList(list, prs, timeOf) {
     .join("");
 }
 
+// "Exports discovered" lines say the total grew, which is noise next to what got done: they only fill up a quiet list.
+const eventTitle = (title) => title.replace(/^(lib[\w.]+): /, (_, name) => `${libraryLabel(name)}: `);
+
 function renderEvents(events) {
-  const list = events.filter((event) => event.kind !== "game").slice(0, 5);
+  const done = events.filter((event) => event.kind !== "discovery");
+  const found = events.filter((event) => event.kind === "discovery" && !event.title.includes("exports discovered"));
+  const list = [...done, ...found].slice(0, 5);
   $("events").innerHTML = list.length
     ? list
-        .map((event) => `<li class="event"><span class="event-dot" style="background:${KIND_COLORS[event.kind] ?? "var(--series-1)"}"></span><span class="event-title">${escape(event.title)}</span><span class="event-date">${shortDate(event.time)}</span></li>`)
+        .map((event) => `<li class="event"><span class="event-dot" style="background:${KIND_COLORS[event.kind] ?? "var(--series-1)"}"></span><span class="event-title">${escape(eventTitle(event.title))}</span><span class="event-date">${shortDate(event.time)}</span></li>`)
         .join("")
     : `<li class="empty">Nothing yet.</li>`;
 }
 
 function renderGames(games) {
   if (!games) return;
-  $("games-meta").textContent = `${fmt(games.tracked)} tracked`;
+  $("games-meta").textContent = `${fmt(games.active24h)} active today`;
   const max = Math.max(1, ...games.stages.map((stage) => stage.count));
   $("stages").innerHTML = games.stages
     .map((stage) => `<div class="stage"><span class="label">${escape(stage.name)}</span><span class="bar"><span style="width:${((stage.count / max) * 100).toFixed(1)}%"></span></span><span class="count">${fmt(stage.count)}</span></div>`)
@@ -150,17 +173,264 @@ function renderMap(libraries) {
   drawLibraryMap(canvas, libraries.all);
 }
 
+const MILESTONE_STEP = 1000;
+let latest = null;
+
+function dailyPace(progress) {
+  if (progress?.week?.done > 0) return progress.week.done / 7;
+  return progress?.day?.done > 0 ? progress.day.done : null;
+}
+
+function etaText(left, pace) {
+  if (!pace) return "";
+  const hours = (left / pace) * 24;
+  if (hours < 1) return "under an hour away";
+  if (hours < 48) return `about ${Math.round(hours)} h away`;
+  return `about ${Math.round(hours / 24)} days away`;
+}
+
+function nextMilestone(progress) {
+  const target = (Math.floor(progress.done / MILESTONE_STEP) + 1) * MILESTONE_STEP;
+  return { target, left: target - progress.done, from: target - MILESTONE_STEP };
+}
+
+function renderGoal(progress) {
+  if (!progress) return;
+  const { target, left } = nextMilestone(progress);
+  const eta = etaText(left, dailyPace(progress));
+  $("goal").innerHTML = `Goal: <strong>${fmt(target)}</strong> functions · <strong>${fmt(left)}</strong> to go${eta ? ` · ${eta}` : ""}`;
+}
+
+// Scenes
+let spotlightIndex = 0;
+const STAGE_ORDER = ["Does not convert", "Stops before first frame", "Logos or loading", "Menu", "In game"];
+
+function coverHtml(game) {
+  const name = `<div class="cover-name">${escape(game.name)}</div>`;
+  if (!game.cover) return `<div class="cover">${name}</div>`;
+  return `<div class="cover">${name}<img src="${escape(game.cover)}" alt="" onerror="this.remove()"></div>`;
+}
+
+function renderSpotlight() {
+  const recent = latest?.games?.recent ?? [];
+  const staged = recent.filter((game) => game.stage);
+  if (!staged.length) return false;
+  const pool = staged.filter((game) => game.cover).length ? staged.filter((game) => game.cover) : staged;
+  const game = pool[spotlightIndex % pool.length];
+  spotlightIndex += 1;
+  const reached = STAGE_ORDER.indexOf(game.stage);
+  const steps = STAGE_ORDER.map((stage, index) => `<div class="track-step ${index === reached ? "current" : index < reached ? "passed" : ""}">${escape(stage)}</div>`).join("");
+  const others = staged.filter((other) => other !== game).slice(0, 4)
+    .map((other) => `<div class="other"><div class="other-name">${escape(other.name)}</div><div class="other-stage">${escape(other.stage)} · ${ago(other.updatedAt)}</div></div>`).join("");
+  const replies = game.replies ? ` · ${fmt(game.replies)} ${game.replies > 1 ? "replies" : "reply"}` : "";
+  $("scene-games").innerHTML = `<div class="scene-body">
+    <div class="spotlight-main">${coverHtml(game)}
+      <div class="spotlight-text">
+        <div><div class="scene-tag">Game spotlight</div><h2 class="scene-title">${escape(game.name)}</h2></div>
+        <div class="track">${steps}</div>
+        <div class="spotlight-meta">Report updated ${ago(game.updatedAt)}${replies}</div>
+      </div>
+    </div>
+    <div class="spotlight-others">${others}</div>
+  </div>`;
+  return true;
+}
+
+function renderContributors() {
+  const github = latest?.github;
+  if (!github?.topAuthors?.length) return false;
+  $("scene-contributors").innerHTML = `<div class="scene-body">
+    <div><div class="scene-tag">Who is building it</div><h2 class="scene-title">Most merged PRs</h2></div>
+    <div class="authors">${github.topAuthors.map((author) => `<div class="author"><img src="${escape(avatar(author.avatar, 220))}" alt=""><div class="author-text"><div class="author-name">${escape(author.author)}</div><div class="author-count">${fmt(author.merged)} PR${author.merged > 1 ? "s" : ""}</div></div></div>`).join("")}</div>
+    <div class="scene-note">Across the latest ${fmt(github.topWindow)} merged PRs · ${fmt(github.merged24h)} merged in the last 24 hours</div>
+  </div>`;
+  return true;
+}
+
+function renderMovers() {
+  const libraries = latest?.libraries;
+  const movers = libraries?.movers?.slice(0, 6) ?? [];
+  if (!movers.length) return false;
+  $("scene-movers").innerHTML = `<div class="scene-body">
+    <div><div class="scene-tag">Moving fast</div><h2 class="scene-title">Biggest gains since ${libraries.moversSince ? shortDate(libraries.moversSince) : "yesterday"}</h2></div>
+    <div class="movers">${movers.map((mover) => `<div class="mover"><div><div class="mover-name">${escape(libraryLabel(mover.name))}</div><div class="mover-lib">${escape(mover.name)} · ${fmt(mover.done)} / ${fmt(mover.total)}</div></div><div class="mover-bar"><span style="width:${mover.total ? ((mover.done / mover.total) * 100).toFixed(1) : 0}%"></span></div><div class="mover-gain">${signed(mover.gained)}</div></div>`).join("")}</div>
+  </div>`;
+  return true;
+}
+
+function renderMilestoneScene() {
+  const progress = latest?.progress;
+  if (!progress) return false;
+  const { target, left, from } = nextMilestone(progress);
+  const pace = dailyPace(progress);
+  const eta = etaText(left, pace);
+  const points = latest.history ?? [];
+  const gains = points.slice(1).map((point, index) => ({ date: point.date, gain: point.done - points[index].done })).slice(-10);
+  const top = Math.max(1, ...gains.map((entry) => entry.gain));
+  $("scene-milestone").innerHTML = `<div class="scene-body">
+    <div class="scene-tag">Next milestone</div>
+    <div class="goal-row">
+      <div class="goal-left">
+        <div class="goal-number">${fmt(target)}</div>
+        <div class="goal-left-text"><span>${fmt(left)}</span> functions to go${eta ? ` · ${eta}` : ""}</div>
+        <div class="goal-meter"><span style="width:${(((progress.done - from) / MILESTONE_STEP) * 100).toFixed(1)}%"></span></div>
+        <div class="scene-note">${pace ? `Pace: about ${fmt(Math.round(pace))} functions a day over 7 days. ` : ""}${fmt(progress.total)} found so far, and the total still grows as new ones are found.</div>
+      </div>
+      <div>
+        <div class="gains-title">Functions added per update</div>
+        <div class="gains">${gains.map((entry) => `<div class="gain"><span class="gain-value">${fmt(entry.gain)}</span><div class="gain-bar" style="height:${Math.max(1, (Math.max(0, entry.gain) / top) * 78).toFixed(1)}%"></div><span class="gain-date">${shortDate(`${entry.date}T12:00:00Z`).replace(/^\w+ /, "")}</span></div>`).join("")}</div>
+      </div>
+    </div>
+  </div>`;
+  return true;
+}
+
+const DASHBOARD_SECONDS = 45, SCENE_SECONDS = 25;
+const SCENES = {
+  dashboard: { node: "scene-dashboard", title: "Live dashboard", render: () => true, seconds: DASHBOARD_SECONDS },
+  games: { node: "scene-games", title: "Game spotlight", render: renderSpotlight, seconds: SCENE_SECONDS },
+  contributors: { node: "scene-contributors", title: "Top contributors", render: renderContributors, seconds: SCENE_SECONDS },
+  movers: { node: "scene-movers", title: "Biggest gains", render: renderMovers, seconds: SCENE_SECONDS },
+  milestone: { node: "scene-milestone", title: "Next milestone", render: renderMilestoneScene, seconds: SCENE_SECONDS },
+};
+const ROTATION = ["dashboard", "games", "dashboard", "milestone", "dashboard", "games", "dashboard", "contributors", "dashboard", "games", "dashboard", "movers"];
+const params = new URLSearchParams(location.search);
+const pinnedScene = SCENES[params.get("scene")] ? params.get("scene") : null;
+let rotationIndex = 0;
+let sceneEnds = 0;
+let shownScene = "dashboard";
+
+function showScene(name) {
+  $(SCENES[shownScene].node).classList.remove("active");
+  $(SCENES[name].node).classList.add("active");
+  shownScene = name;
+  sceneEnds = Date.now() + SCENES[name].seconds * 1000;
+}
+
+function nextSceneName() {
+  for (let offset = 1; offset <= ROTATION.length; offset += 1) {
+    const index = (rotationIndex + offset) % ROTATION.length;
+    if (ROTATION[index] !== shownScene) return { name: ROTATION[index], index };
+  }
+  return { name: "dashboard", index: 0 };
+}
+
+function tickScenes() {
+  if (pinnedScene) {
+    if (shownScene !== pinnedScene && latest && SCENES[pinnedScene].render()) showScene(pinnedScene);
+    return;
+  }
+  if (!sceneEnds) sceneEnds = Date.now() + DASHBOARD_SECONDS * 1000;
+  let left = Math.ceil((sceneEnds - Date.now()) / 1000);
+  if (left <= 0) {
+    // A scene whose data is not there yet is skipped.
+    for (let tries = 0; tries < ROTATION.length; tries += 1) {
+      const next = nextSceneName();
+      rotationIndex = next.index;
+      if (SCENES[next.name].render()) {
+        showScene(next.name);
+        break;
+      }
+    }
+    left = SCENES[shownScene].seconds;
+  }
+  const next = SCENES[nextSceneName().name];
+  $("next-up").innerHTML = `Next: <strong>${next.title}</strong> in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+}
+
+// Alerts: new merged PRs, new game reports and finished libraries slide in one at a time.
+const ALERT_MS = 9000, ALERT_GAP_MS = 1500, ALERT_QUEUE = 6;
+const alertQueue = [];
+const seen = { prs: null, games: null, events: null, done: null };
+let alertBusy = false;
+
+function pushAlert(alert) {
+  alertQueue.push(alert);
+  while (alertQueue.length > ALERT_QUEUE) alertQueue.shift();
+  playAlerts();
+}
+
+function playAlerts() {
+  if (alertBusy || !alertQueue.length || $("takeover").classList.contains("show")) return;
+  alertBusy = true;
+  const alert = alertQueue.shift();
+  const image = alert.image ? `<img src="${escape(alert.image)}" alt="">` : `<div class="alert-icon">${alert.icon ?? "★"}</div>`;
+  $("alerts").innerHTML = `<div class="alert ${alert.kind ?? ""}">${image}<div class="alert-text"><div class="alert-kicker">${escape(alert.kicker)}</div><div class="alert-title">${escape(alert.title)}</div>${alert.meta ? `<div class="alert-meta">${escape(alert.meta)}</div>` : ""}</div>${alert.pill ? `<span class="pill">${escape(alert.pill)}</span>` : "<span></span>"}</div>`;
+  setTimeout(() => {
+    $("alerts").innerHTML = "";
+    setTimeout(() => {
+      alertBusy = false;
+      playAlerts();
+    }, ALERT_GAP_MS);
+  }, ALERT_MS);
+}
+
+function celebrate(kicker, value, note) {
+  const colors = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--series-4)", "var(--series-5)"];
+  const confetti = Array.from({ length: 36 }, (_, index) => `<span class="confetti" style="left:${(index * 53) % 100}%;background:${colors[index % colors.length]};animation-duration:${3 + (index % 5) * 0.6}s;animation-delay:-${(index * 0.37).toFixed(2)}s"></span>`).join("");
+  $("takeover").innerHTML = `${confetti}<div class="takeover-text"><div class="takeover-kicker">${escape(kicker)}</div><div class="takeover-value">${escape(value)}</div><div class="takeover-note">${escape(note)}</div></div>`;
+  $("takeover").classList.add("show");
+  setTimeout(() => {
+    $("takeover").classList.remove("show");
+    $("takeover").innerHTML = "";
+    playAlerts();
+  }, 14_000);
+}
+
+function prAlert(pr) {
+  const implemented = pr.report?.implemented ?? 0;
+  return { kicker: "PR merged", title: pr.title, meta: `#${pr.number} · ${pr.author}`, image: avatar(pr.avatar, 152), pill: implemented > 0 ? `+${fmt(implemented)} function${implemented > 1 ? "s" : ""}` : null };
+}
+
+function gameAlert(game) {
+  return { kind: "game", kicker: "New game report", title: game.name, meta: game.stage ? `Furthest point: ${game.stage}` : "First test reported", icon: "🎮" };
+}
+
+// The first read of each list only records what is there: an alert means it happened while on air.
+function detectChanges(state) {
+  const fresh = (key, items, id) => {
+    const known = seen[key];
+    seen[key] = new Set([...(known ?? []), ...items.map(id)]);
+    return known ? items.filter((item) => !known.has(id(item))) : [];
+  };
+  if (state.github) fresh("prs", state.github.mergedPrs, (pr) => pr.number).reverse().forEach((pr) => pushAlert(prAlert(pr)));
+  if (state.games) fresh("games", state.games.recent, (game) => game.number).filter((game) => Date.now() - Date.parse(game.createdAt) < 3_600_000).reverse().forEach((game) => pushAlert(gameAlert(game)));
+  const notable = state.events.filter((event) => event.kind === "complete" || event.kind === "release");
+  fresh("events", notable, (event) => `${event.kind}|${event.title}`).reverse().forEach((event) => pushAlert({ kicker: event.kind === "release" ? "New release" : "Library finished", title: eventTitle(event.title), meta: event.detail ?? "", icon: event.kind === "release" ? "🚀" : "✅" }));
+  if (state.progress) {
+    const before = seen.done;
+    seen.done = state.progress.done;
+    if (before !== null && Math.floor(state.progress.done / MILESTONE_STEP) > Math.floor(before / MILESTONE_STEP)) {
+      celebrate("Milestone reached", fmt(Math.floor(state.progress.done / MILESTONE_STEP) * MILESTONE_STEP), "PS5 system functions implemented");
+    }
+  }
+}
+
+function runDemo(kind) {
+  const github = latest?.github;
+  if (kind === "alert" && github?.mergedPrs?.[0]) {
+    pushAlert(prAlert({ ...github.mergedPrs[0], report: { implemented: 12, declared: 0 } }));
+    if (latest.games?.recent?.[0]) pushAlert(gameAlert(latest.games.recent[0]));
+  }
+  if (kind === "milestone") celebrate("Milestone reached", "9,000", "PS5 system functions implemented");
+}
+
 async function refresh() {
   try {
     const response = await fetch("/api/state", { cache: "no-store" });
     if (!response.ok) throw new Error(String(response.status));
     const state = await response.json();
+    const first = !latest;
+    latest = state;
     renderKpis(state);
+    renderGoal(state.progress);
     renderChart(state.history);
     renderPrs(state.github);
     renderEvents(state.events);
     renderGames(state.games);
     renderMap(state.libraries);
+    detectChanges(state);
+    if (first && params.get("demo")) runDemo(params.get("demo"));
   } catch (error) {
     console.error("refresh", error);
   }
@@ -168,6 +438,8 @@ async function refresh() {
 
 tickClock();
 setInterval(tickClock, 5000);
+tickScenes();
+setInterval(tickScenes, 1000);
 refresh();
 setInterval(refresh, REFRESH_MS);
 setTimeout(() => location.reload(), RELOAD_MS);

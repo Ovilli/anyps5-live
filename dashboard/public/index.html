@@ -10,16 +10,22 @@
   <main class="screen">
     <header class="top">
       <h1>AnyPS5 <span class="thin">progress</span></h1>
-      <div class="clock"><span id="clock">--:--</span><span class="clock-zone">UTC</span></div>
+      <div class="goal" id="goal"></div>
+      <div class="top-right">
+        <div class="next-up" id="next-up"></div>
+        <div class="clock"><span id="clock">--:--</span><span class="clock-zone">UTC</span></div>
+      </div>
     </header>
 
+    <div class="stage-area">
+    <div class="scene dashboard active" id="scene-dashboard">
     <section class="kpis">
       <article class="tile hero">
-        <div class="tile-label">System libraries implemented</div>
+        <div class="tile-label">PS5 system functions implemented</div>
         <div class="hero-row">
-          <div class="hero-value" id="hero-percent">—</div>
+          <div class="hero-value" id="hero-done">—</div>
           <div class="hero-side">
-            <div class="hero-count" id="hero-count">— / — functions</div>
+            <div class="hero-count" id="hero-count">—</div>
             <div class="hero-delta" id="hero-delta">&nbsp;</div>
           </div>
         </div>
@@ -27,7 +33,7 @@
       </article>
       <article class="tile"><div class="tile-label">PRs merged today</div><div class="tile-value" id="kpi-merged24">—</div><div class="tile-note" id="kpi-merged7">—</div></article>
       <article class="tile"><div class="tile-label">Open PRs</div><div class="tile-value" id="kpi-open-prs">—</div><div class="tile-note">awaiting review</div></article>
-      <article class="tile"><div class="tile-label">Playable games</div><div class="tile-value" id="kpi-playable">—</div><div class="tile-note" id="kpi-menus">—</div></article>
+      <article class="tile"><div class="tile-label">Games reaching gameplay</div><div class="tile-value" id="kpi-ingame">—</div><div class="tile-note" id="kpi-games-note">—</div></article>
       <article class="tile"><div class="tile-label">GitHub stars</div><div class="tile-value" id="kpi-stars">—</div><div class="tile-note" id="kpi-release">—</div></article>
     </section>
 
@@ -70,12 +76,22 @@
       </article>
 
       <article class="panel">
-        <header class="panel-head"><h2>Games by stage</h2><span class="panel-meta" id="games-meta"></span></header>
+        <header class="panel-head"><h2>Furthest point reported</h2><span class="panel-meta" id="games-meta"></span></header>
         <div class="stages" id="stages"></div>
       </article>
     </section>
+    </div>
+
+    <section class="scene spotlight" id="scene-games"></section>
+    <section class="scene" id="scene-contributors"></section>
+    <section class="scene" id="scene-movers"></section>
+    <section class="scene" id="scene-milestone"></section>
+    </div>
   </main>
+  <div class="alerts" id="alerts"></div>
+  <div class="takeover" id="takeover"></div>
   <script src="map.js"></script>
+  <script src="labels.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

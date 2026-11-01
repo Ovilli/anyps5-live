@@ -15,7 +15,7 @@ export interface HistoryPoint {
   shadersTotal: number;
 }
 
-export type EventKind = "discovery" | "jump" | "percent" | "library" | "complete" | "milestone" | "game" | "release";
+export type EventKind = "discovery" | "jump" | "percent" | "library" | "complete" | "milestone" | "release";
 
 export interface LiveEvent {
   time: string;
@@ -45,6 +45,17 @@ export interface OpenedPr {
   avatar: string;
   createdAt: string;
   report: PrReport | null;
+}
+
+export interface GameThread {
+  number: number;
+  name: string;
+  titleId: string | null;
+  stage: string | null;
+  replies: number;
+  createdAt: string;
+  updatedAt: string;
+  cover: string | null;
 }
 
 export interface Snapshot {
@@ -89,18 +100,19 @@ export interface State {
     merged7d: number | null;
     mergedPrs: MergedPr[];
     openedPrs: OpenedPr[];
+    topAuthors: { author: string; avatar: string; merged: number }[];
+    topWindow: number;
     release: { tag: string; publishedAt: string | null } | null;
     rateRemaining: number | null;
     authenticated: boolean;
   } | null;
   games: {
-    generatedAt: string;
     tracked: number;
-    playable: number;
-    menus: number;
-    blockers: number;
+    inGame: number;
+    menu: number;
+    active24h: number;
     stages: { name: string; count: number }[];
-    changes: { time: string; text: string }[];
+    recent: GameThread[];
   } | null;
   events: LiveEvent[];
 }

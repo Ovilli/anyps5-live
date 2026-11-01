@@ -1,4 +1,5 @@
-import { gameEvents, historyEvents, snapshotEvents, describeGameChange } from "./events.js";
+import { historyEvents, snapshotEvents } from "./events.js";
+import { STAGES, toThread, type DiscussionJson } from "./games.js";
 import { GitHub, getJson } from "./http.js";
 import type { Store } from "./store.js";
 import type { HistoryPoint, LiveEvent, MergedPr, OpenedPr, PrReport, Snapshot, State } from "./types.js";
@@ -29,21 +30,30 @@ interface PullJson {
   user: { login: string; avatar_url: string };
 }
 
+// The roadmap is archived and its stages stopped on 23 October 2026: only its cover images are still used.
 interface RoadmapJson {
-  generated_at: string;
-  stages: { name: string; rank: number }[];
-  stats: {
-    games: number;
-    games_playable: number;
-    games_reach_menus: number;
-    games_with_open_blockers: number;
-    games_by_stage: Record<string, number>;
+  games: { titles?: { id: string }[]; image?: { wide?: string; square?: string } | null }[];
+}
+
+interface DiscussionsJson {
+  repository: {
+    discussionCategory: { id: string } | null;
+    discussions: { pageInfo: { endCursor: string | null; hasNextPage: boolean }; nodes: DiscussionJson[] };
   };
 }
 
-interface FeedJson {
-  items: { id: string; content_text?: string }[];
-}
+const GAME_CATEGORY = "game-bring-up";
+const CATEGORY_QUERY = `query($owner: String!, $name: String!, $slug: String!) {
+  repository(owner: $owner, name: $name) { discussionCategory(slug: $slug) { id } }
+}`;
+const THREADS_QUERY = `query($owner: String!, $name: String!, $category: ID!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    discussions(first: 100, after: $after, categoryId: $category, orderBy: { field: UPDATED_AT, direction: DESC }) {
+      pageInfo { endCursor hasNextPage }
+      nodes { number title body createdAt updatedAt comments { totalCount } }
+    }
+  }
+}`;
 
 const today = (): string => new Date().toISOString().slice(0, 10);
 const daysAgo = (days: number): string => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
@@ -58,7 +68,8 @@ export class Collector {
   readonly startedAt = new Date().toISOString();
   private history: HistoryPoint[] = [];
   private current: ProgressJson | null = null;
-  private feed: FeedJson | null = null;
+  private covers = new Map<string, string>();
+  private gameCategory: string | null = null;
   readonly state: State = {
     updatedAt: new Date().toISOString(),
     sources: {},
@@ -105,6 +116,8 @@ export class Collector {
       merged7d: null,
       mergedPrs: [],
       openedPrs: [],
+      topAuthors: [],
+      topWindow: 0,
       release: null,
       rateRemaining: null,
       authenticated: this.github.authenticated,
@@ -113,7 +126,7 @@ export class Collector {
   }
 
   private refreshEvents(): void {
-    const computed: LiveEvent[] = [...historyEvents(this.history), ...(this.feed ? gameEvents(this.feed.items) : [])];
+    const computed: LiveEvent[] = historyEvents(this.history);
     const seen = new Set<string>();
     this.state.events = [...this.store.data.events, ...computed]
       .filter((event) => {
@@ -223,6 +236,15 @@ export class Collector {
         mergedAt: pull.merged_at!,
         report: this.store.data.prReports[pull.number] ?? null,
       }));
+      const authors = new Map<string, { author: string; avatar: string; merged: number }>();
+      for (const pull of merged) {
+        if (pull.user.login.endsWith("[bot]")) continue;
+        const entry = authors.get(pull.user.login) ?? { author: pull.user.login, avatar: pull.user.avatar_url, merged: 0 };
+        entry.merged += 1;
+        authors.set(pull.user.login, entry);
+      }
+      github.topAuthors = [...authors.values()].sort((a, b) => b.merged - a.merged).slice(0, 8);
+      github.topWindow = merged.length;
       const open = await this.github.get<PullJson[]>(`/repos/${REPO}/pulls?state=open&sort=created&direction=desc&per_page=20`);
       const opened = open.filter((pull) => !pull.draft).slice(0, 6);
       github.openedPrs = opened.map<OpenedPr>((pull) => ({
@@ -308,30 +330,43 @@ export class Collector {
     });
   }
 
-  async collectRoadmap(): Promise<void> {
-    await this.run("roadmap", async () => {
+  async collectCovers(): Promise<void> {
+    await this.run("covers", async () => {
       const roadmap = await getJson<RoadmapJson>(`${ROADMAP}/roadmap.json?${Date.now()}`);
-      const stages = [...roadmap.stages].sort((a, b) => a.rank - b.rank);
-      this.state.games = {
-        generatedAt: roadmap.generated_at,
-        tracked: roadmap.stats.games,
-        playable: roadmap.stats.games_playable,
-        menus: roadmap.stats.games_reach_menus,
-        blockers: roadmap.stats.games_with_open_blockers,
-        stages: stages.map((stage) => ({ name: stage.name, count: roadmap.stats.games_by_stage[stage.name] ?? 0 })),
-        changes: this.state.games?.changes ?? [],
-      };
+      const covers = new Map<string, string>();
+      for (const game of roadmap.games) {
+        const image = game.image?.wide ?? game.image?.square;
+        if (image) for (const title of game.titles ?? []) covers.set(title.id, image);
+      }
+      this.covers = covers;
     });
   }
 
-  async collectFeed(): Promise<void> {
+  // Per-game status lives in AnyPS5's game bring-up discussions, one thread per title.
+  async collectGames(): Promise<void> {
+    if (!this.github.authenticated) return;
     await this.run("games", async () => {
-      this.feed = await getJson<FeedJson>(`${ROADMAP}/feed.json?${Date.now()}`);
-      const changes = this.feed.items.flatMap((item) =>
-        (item.content_text ?? "").split("\n").filter((line) => line.trim()).map((line) => ({ time: item.id, text: describeGameChange(line) })),
-      );
-      if (this.state.games) this.state.games.changes = changes.slice(0, 8);
-      this.refreshEvents();
+      const [owner, name] = REPO.split("/");
+      this.gameCategory ??= (await this.github.graphql<DiscussionsJson>(CATEGORY_QUERY, { owner, name, slug: GAME_CATEGORY })).repository.discussionCategory?.id ?? null;
+      if (!this.gameCategory) throw new Error(`No ${GAME_CATEGORY} discussion category`);
+      const discussions: DiscussionJson[] = [];
+      let after: string | null = null;
+      do {
+        const page: DiscussionsJson = await this.github.graphql<DiscussionsJson>(THREADS_QUERY, { owner, name, category: this.gameCategory, after });
+        discussions.push(...page.repository.discussions.nodes);
+        after = page.repository.discussions.pageInfo.hasNextPage ? page.repository.discussions.pageInfo.endCursor : null;
+      } while (after);
+
+      const threads = discussions.map((discussion) => toThread(discussion, this.covers));
+      const count = (stage: string) => threads.filter((thread) => thread.stage === stage).length;
+      this.state.games = {
+        tracked: threads.length,
+        inGame: count("In game"),
+        menu: count("Menu"),
+        active24h: threads.filter((thread) => Date.now() - Date.parse(thread.updatedAt) < 86_400_000).length,
+        stages: STAGES.map((stage) => ({ name: stage, count: count(stage) })),
+        recent: threads.slice(0, 24),
+      };
     });
   }
 
@@ -341,8 +376,8 @@ export class Collector {
     void (async () => {
       await this.collectHistory();
       await this.collectProgress();
-      await this.collectRoadmap();
-      await this.collectFeed();
+      await this.collectCovers();
+      await this.collectGames();
       await this.collectRepository();
       await this.collectActivity();
       await this.collectCounts();
@@ -352,7 +387,7 @@ export class Collector {
     every(fast ? 2 : 6, () => this.collectActivity());
     every(fast ? 10 : 30, () => this.collectRepository());
     every(fast ? 5 : 10, () => this.collectCounts());
-    every(180, () => this.collectRoadmap());
-    every(30, () => this.collectFeed());
+    every(180, () => this.collectCovers());
+    every(10, () => this.collectGames());
   }
 }

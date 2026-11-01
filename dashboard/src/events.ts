@@ -87,22 +87,3 @@ export function snapshotEvents(previous: Snapshot, current: Snapshot, time: stri
   }
   return events;
 }
-
-export function describeGameChange(line: string): string {
-  const text = line.trim().replace(/\.$/, "");
-  const moved = /^(.+?) went from (.+?) to (.+)$/.exec(text);
-  if (moved) return `${moved[1]}: ${moved[2]} → ${moved[3]}`;
-  const entered = /^(.+?) is at (.+?) now \(no stage before\)$/.exec(text);
-  if (entered) return `${entered[1]}: enters at ${entered[2]}`;
-  return text;
-}
-
-export function gameEvents(items: { id: string; content_text?: string }[]): LiveEvent[] {
-  const events: LiveEvent[] = [];
-  for (const item of items) {
-    for (const line of (item.content_text ?? "").split("\n")) {
-      if (line.trim()) events.push({ time: item.id, kind: "game", title: describeGameChange(line) });
-    }
-  }
-  return events;
-}

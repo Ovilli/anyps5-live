@@ -8,12 +8,18 @@ An unofficial community project: it is not affiliated with the AnyPS5 maintainer
 
 ## What is on screen
 
-- **Key figures**: system libraries implemented (percentage, functions done / declared, gains over 24 hours and 7 days), PRs merged today and this week, open PRs, playable games, GitHub stars and the latest release.
+- **Header**: the next milestone (functions to go, estimated from the 7-day pace) and a countdown to the next scene.
+- **Rotating scenes**: the dashboard for 45 seconds, then one full-screen scene for 25 seconds, readable on a phone: a game spotlight, the next milestone, top contributors, the biggest gains.
+- **Alerts**: a card slides in for each new merged PR, new game report, finished library and new release. Each 1,000th function gets a full-screen celebration.
+
+The dashboard scene shows:
+
+- **Key figures**: system functions implemented (with gains over 24 hours and 7 days, and the share of those found so far), PRs merged today and this week, open PRs, games reaching gameplay, GitHub stars and the latest release.
 - **System libraries map**: the same squarified treemap as the progress map in AnyPS5's README, redrawn live: one block per library sized by its function count, filled with one cell per function, implemented ones first.
 - **Latest merged and opened PRs**: author, age, and the number of functions each PR implemented (green) or declared as stubs (grey), read from the project's progress-report bot. Open PRs show it once the bot has reported.
 - **Functions over time**: implemented and declared functions since the project started publishing its history.
-- **Major changes**: new libraries, exports discovered, big daily jumps, completion-rate shifts (with the reason when the total widened), milestones, completed libraries, new releases.
-- **Games by stage**: the AnyPS5 roadmap's tracked games from "Converts" to "Playable".
+- **Major changes**: big daily jumps, milestones, completed libraries, new releases and new libraries, named by what they do where known.
+- **Furthest point reported**: the game bring-up threads by the stage their first report reached.
 - A UTC clock in the corner.
 
 ## How it works
@@ -22,7 +28,7 @@ An unofficial community project: it is not affiliated with the AnyPS5 maintainer
                  ┌──────────────────────────────┐        ┌──────────────────────────────────┐
  GitHub API ───► │ dashboard (Node 22)          │  HTTP  │ streamer                         │  RTMP
  Pages JSON ───► │ collects, detects events,    │ ─────► │ Xvfb + Chromium (kiosk 1920×1080)│ ─────► YouTube
- Roadmap   ────► │ serves / and /api/state      │        │ ffmpeg x11grab → H.264 + AAC     │
+ Discussions ──► │ serves / and /api/state      │        │ ffmpeg x11grab → H.264 + AAC     │
                  │ volume: daily snapshots      │        │ restarts itself on failure       │
                  └──────────────────────────────┘        └──────────────────────────────────┘
 ```
@@ -34,22 +40,25 @@ An unofficial community project: it is not affiliated with the AnyPS5 maintainer
 | Merged PRs and their progress reports | GitHub REST API | 2 / 6 min |
 | Open PRs, merges per period | GitHub search API | 5 / 10 min |
 | Stars, latest release | GitHub REST API | 10 / 30 min |
-| Games by stage | `https://alxcbtw.github.io/anyps5-roadmap/` (`roadmap.json`, `feed.json`) | 3 h / 30 min |
+| Games by stage | AnyPS5's [Game bring-up discussions](https://github.com/boykopovar/AnyPS5/discussions/categories/game-bring-up), GitHub GraphQL API | 10 min / not available |
+| Game covers | `https://alxcbtw.github.io/anyps5-roadmap/roadmap.json` (archived on 24 October 2026; only its images are used) | 3 h |
 
 The dashboard keeps one snapshot of every library per day in the `dashboard-data` volume. Comparing snapshots is what finds new libraries, newly discovered exports and completed libraries as they happen. History-based events (export waves, big jumps, milestones) are there from the first minute.
+
+A game's stage is the "Furthest point" of the first report in its thread, read from the discussion's form. Later replies are not read, so the counts can lag behind, and a thread whose first report gives no recognisable stage counts as reported but in no stage. "In game" means gameplay was reached, not that the game is playable from start to finish.
 
 The browser page refreshes its data every 15 seconds and reloads itself every 6 hours; Chromium is restarted every 24 hours to keep memory flat.
 
 ## Requirements
 
 - A VPS with Docker Engine and the Compose plugin.
-- About 2.5 vCPU and 2 GB of RAM for the default 1440p at 30 fps (`PRESET=superfast`).
+- About 4 vCPU (5 during scene changes) and 2 GB of RAM for the default 1440p at 30 fps (`PRESET=superfast`).
 - Outbound TCP 1935 (RTMP) and about 13 Mbit/s of upload.
 
 ## Set up
 
 1. **YouTube**: in YouTube Studio, choose *Create → Go live → Stream*. Copy the stream key. For a 24/7 stream, turn on *Auto-start*, turn off *Auto-stop*, keep latency on *Normal* and enable DVR. A channel that has never streamed may need to be verified and wait up to 24 hours before live streaming is enabled.
-2. **GitHub token** (optional, recommended): create a fine-grained token at <https://github.com/settings/personal-access-tokens/new> with *Public repositories (read-only)* access and no permissions. Without it the dashboard still works, but stays within 60 API requests per hour.
+2. **GitHub token** (optional, recommended): create a fine-grained token at <https://github.com/settings/personal-access-tokens/new> with *Public repositories (read-only)* access and no permissions. Without it the dashboard still works, but stays within 60 API requests per hour and shows no game data, since GitHub's GraphQL API requires a token.
 3. **Deploy**:
 
    ```bash
@@ -86,6 +95,8 @@ docker run -d --restart unless-stopped -e YOUTUBE_STREAM_KEY=... -v anyps5-data:
 
   Then open <http://localhost:8080> in a window sized 1920×1080.
 
+- **See one scene or alert**: add `?scene=games` (or `contributors`, `movers`, `milestone`) to pin a scene, or `?demo=alert` / `?demo=milestone` to play an alert.
+
 - **Record 30 seconds to a file** instead of streaming:
 
   ```bash
@@ -104,7 +115,7 @@ docker run -d --restart unless-stopped -e YOUTUBE_STREAM_KEY=... -v anyps5-data:
 | Stop everything | `docker compose down` (the snapshots stay in the volume) |
 | Current state as JSON | `curl -s http://127.0.0.1:8080/api/state` |
 
-**Soundtrack**: YouTube requires an audio track, so the streamer sends silence by default. Put `.mp3`, `.m4a`, `.ogg`, `.flac` or `.wav` files in `./music` to loop them instead; use only music you have the rights to stream.
+**Soundtrack**: YouTube requires an audio track, so the streamer sends silence by default. Put `.mp3`, `.m4a`, `.ogg`, `.flac` or `.wav` files in `./music` to play them in shuffled order instead, then restart the streamer; use only music you have the rights to stream. In single-container mode, mount the folder on `/music`.
 
 ## Thumbnail
 
@@ -124,12 +135,12 @@ docker compose run --rm --entrypoint chromium streamer --headless=new --no-sandb
 | `RECORD_SECONDS` | | Stop after this many seconds (for tests) |
 | `GITHUB_TOKEN` | | Read-only GitHub token |
 | `WIDTH` / `HEIGHT` | `2560` / `1440` | Output resolution. The 1920×1080 page is rendered at this size rather than scaled up, so it stays sharp |
-| `FPS` / `CAPTURE_FPS` | `30` / `10` | Output and capture frame rates. YouTube needs a steady 30 fps at a constant bitrate; the mostly static screen is captured at 10 fps and each frame repeated, which skips the colour conversion of the repeats |
+| `FPS` / `CAPTURE_FPS` | `30` / `30` | Output and capture frame rates. YouTube needs a steady 30 fps at a constant bitrate. A lower capture rate repeats frames, which saves some CPU but makes the animations stutter |
 | `VIDEO_BITRATE` / `BUFSIZE` / `PRESET` | `12000k` / `24000k` / `superfast` | Encoder settings, constant bitrate |
 | `PORT` | `8080` (`3000` in the single-container image) | Dashboard port |
 | `ANYPS5_REPO` | `boykopovar/AnyPS5` | Repository to follow (dashboard) |
 | `ANYPS5_PAGES` | `https://boykopovar.github.io/AnyPS5` | Where `progress.json` and `history.json` are published |
-| `ROADMAP_URL` | `https://alxcbtw.github.io/anyps5-roadmap` | Game roadmap |
+| `ROADMAP_URL` | `https://alxcbtw.github.io/anyps5-roadmap` | Where the game cover images come from |
 
 ## Troubleshooting
 

@@ -1,0 +1,45 @@
+"use strict";
+
+// What the libraries do, for viewers who do not read PS5 SDK names. Unknown ones keep their short name.
+const LIBRARY_LABELS = {
+  libc: "C standard library",
+  libkernel: "System kernel",
+  libkernel_sys: "System kernel",
+  libSceNKWebKit: "Web browser engine",
+  libSceIcu: "International text",
+  libSceNpCppWebApi: "PSN web services",
+  libSceNpCommon: "PSN core",
+  libSceNpManager: "PSN sign-in",
+  libSceNpTrophy: "Trophies",
+  libSceNpTus: "PSN online storage",
+  libSceSystemService: "System services",
+  libSceUserService: "User accounts",
+  libSceAgc: "Graphics",
+  libSceAgcDriver: "Graphics driver",
+  libSceGLSlimVSH: "System OpenGL",
+  libSceVideoOut: "Video output",
+  libSceAudioOut: "Audio output",
+  libSceAudioIn: "Microphone input",
+  libSceNgs2: "Game audio engine",
+  libScePad: "Controller",
+  libSceSaveData: "Save games",
+  libSceAppContent: "DLC and game content",
+  libSceFont: "Fonts",
+  libSceFreeType: "Fonts",
+  libSceFreeTypeOl: "Fonts",
+  libSceHttp: "HTTP networking",
+  libSceHttp2: "HTTP networking",
+  libSceNet: "Networking",
+  libSceSsl: "Secure connections",
+  libSceLibreSsl: "Secure connections",
+  libSceJson2: "JSON parsing",
+  libSceFios2: "File loading",
+  libSceAvPlayer: "Video playback",
+  libSceVideoRecording: "Video recording",
+  libSceMediaFrameworkInterface: "Media playback",
+  libSceVisionManager: "Camera vision",
+  libSceHmd: "PlayStation VR",
+};
+
+const shortLibrary = (name) => name.replace(/^libSce/, "").replace(/\.native$/, "");
+const libraryLabel = (name) => LIBRARY_LABELS[name.replace(/\.native$/, "")] ?? shortLibrary(name);
