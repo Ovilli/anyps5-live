@@ -125,6 +125,7 @@ export interface State {
     stages: { name: string; count: number }[];
     recent: GameThread[];
     highlights: GameThread[];
+    rockstar: GameThread[];
   } | null;
   events: LiveEvent[];
   youtube: {

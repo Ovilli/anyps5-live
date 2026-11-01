@@ -9,7 +9,7 @@ An unofficial community project: it is not affiliated with the AnyPS5 maintainer
 ## What is on screen
 
 - **Header**: the next milestone (functions to go, estimated from the 7-day pace) and a countdown to the next scene.
-- **Rotating scenes**: the dashboard for 45 seconds, then one full-screen scene for 25 seconds, readable on a phone: a game spotlight, the next milestone, top contributors, the biggest gains.
+- **Rotating scenes**: the dashboard for 45 seconds, then one full-screen scene for 25 seconds, readable on a phone: a spotlight on games reaching gameplay (the best-known ones come back most often), the next milestone, top contributors, the biggest gains.
 - **Alerts**: a card slides in for each new merged PR, new game report, finished library and new release. Each 1,000th function gets a full-screen celebration.
 - **Chat commands**: viewers type `!game <name>` to see how far a game got, `!lib <name>` for a system library's progress, or `!help`; the answer slides in on screen with their name. Set `CHAT_COMMANDS=1` to turn them on.
 - **Calls to action**: a like or subscribe card every 4 minutes and after each milestone, and a live like goal beside the title once `YOUTUBE_API_KEY` and `YOUTUBE_VIDEO_ID` are set.
@@ -155,6 +155,7 @@ docker compose run --rm --entrypoint chromium streamer --headless=new --no-sandb
 | `CHAT_COMMANDS` / `CHAT_POLL_SECONDS` | `0` / `60` | Answers `!game`, `!lib` and `!help` from the live chat on screen, reading the chat this often. Needs the API key and video ID. Each read costs 5 of the key's 10,000 daily units, so 60 seconds (8,640 units a day with the like goal) is the lowest safe value on one key. Each viewer can ask once a minute, and at most 3 answers are shown per read |
 | `SHORTS` / `SHORT_HOUR_UTC` / `SHORT_PRIVACY` | `1` / `18` / `public` | The daily Short: on or off, the hour it is made, and its privacy on YouTube |
 | `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET` / `YOUTUBE_REFRESH_TOKEN` | | Uploads the daily Short |
+| `PAGE` | | Streams another page of the dashboard, such as `gta6.html`, instead of the main screen. It needs its own YouTube stream key |
 | `PORT` | `8080` (`3000` in the single-container image) | Dashboard port |
 | `ANYPS5_REPO` | `boykopovar/AnyPS5` | Repository to follow (dashboard) |
 | `ANYPS5_PAGES` | `https://boykopovar.github.io/AnyPS5` | Where `progress.json` and `history.json` are published |

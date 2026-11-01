@@ -207,7 +207,7 @@ function renderGoal(progress) {
 }
 
 // Scenes
-let spotlightIndex = 0;
+let spotlightIndex = Math.floor(Date.now() / 60_000) % 1000; // A page reload does not start over with the same game.
 const STAGE_ORDER = ["Does not convert", "Stops before first frame", "Logos or loading", "Menu", "In game"];
 
 function coverHtml(game) {
@@ -216,16 +216,24 @@ function coverHtml(game) {
   return `<div class="cover">${name}<img src="${escape(game.cover)}" alt="" onerror="this.remove()"></div>`;
 }
 
+// Games reaching gameplay, best known first. Every other turn goes to the top few, so the games
+// viewers are likely to know come back far more often than the rest.
+const SPOTLIGHT_TOP = 6;
+
+function pickSpotlight(pool, turn) {
+  const top = pool.slice(0, SPOTLIGHT_TOP), rest = pool.slice(SPOTLIGHT_TOP);
+  if (!rest.length || turn % 2 === 0) return top[Math.floor(turn / 2) % top.length];
+  return rest[Math.floor(turn / 2) % rest.length];
+}
+
 function renderSpotlight() {
-  const recent = latest?.games?.recent ?? [];
-  const staged = recent.filter((game) => game.stage);
-  if (!staged.length) return false;
-  const pool = staged.filter((game) => game.cover).length ? staged.filter((game) => game.cover) : staged;
-  const game = pool[spotlightIndex % pool.length];
+  const pool = latest?.games?.highlights ?? [];
+  if (!pool.length) return false;
+  const game = pickSpotlight(pool, spotlightIndex);
   spotlightIndex += 1;
   const reached = STAGE_ORDER.indexOf(game.stage);
   const steps = STAGE_ORDER.map((stage, index) => `<div class="track-step ${index === reached ? "current" : index < reached ? "passed" : ""}">${escape(stage)}</div>`).join("");
-  const others = staged.filter((other) => other !== game).slice(0, 4)
+  const others = pool.filter((other) => other !== game).slice(0, 4)
     .map((other) => `<div class="other"><div class="other-name">${escape(other.name)}</div><div class="other-stage">${escape(other.stage)} · ${ago(other.updatedAt)}</div></div>`).join("");
   const replies = game.replies ? ` · ${fmt(game.replies)} ${game.replies > 1 ? "replies" : "reply"}` : "";
   $("scene-games").innerHTML = `<div class="scene-body">

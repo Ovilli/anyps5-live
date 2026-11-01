@@ -43,7 +43,7 @@ run_browser() {
       --hide-scrollbars --disable-translate --disable-features=Translate,MediaRouter \
       --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows \
       --disable-dev-shm-usage --user-data-dir=/tmp/chromium \
-      --app="$DASHBOARD_URL" >/tmp/chromium.log 2>&1 &
+      --app="${DASHBOARD_URL%/}/${PAGE:-}" >/tmp/chromium.log 2>&1 &
     browser=$!
     ( sleep $(( BROWSER_RESTART_HOURS * 3600 )); kill "$browser" 2>/dev/null ) &
     timer=$!

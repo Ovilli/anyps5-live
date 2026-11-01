@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1920, height=1080">
+  <title>GTA VI countdown</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=block">
+  <link rel="stylesheet" href="gta6.css">
+</head>
+<body>
+  <div class="world">
+    <div class="sky"></div>
+    <div class="sun"></div>
+    <div class="cloud c1"></div>
+    <div class="cloud c2"></div>
+    <div class="cloud c3"></div>
+    <svg class="skyline" id="skyline" viewBox="0 0 1920 300" preserveAspectRatio="none" aria-hidden="true"></svg>
+    <div class="sea"><div class="glint g1"></div><div class="glint g2"></div><div class="glint g3"></div></div>
+    <svg class="palm left" viewBox="0 0 400 760" aria-hidden="true"><use href="#palm"/></svg>
+    <svg class="palm left2" viewBox="0 0 400 760" aria-hidden="true"><use href="#palm"/></svg>
+    <svg class="palm right" viewBox="0 0 400 760" aria-hidden="true"><use href="#palm"/></svg>
+    <svg class="palm right2" viewBox="0 0 400 760" aria-hidden="true"><use href="#palm"/></svg>
+  </div>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="palm" viewBox="0 0 400 760">
+      <path d="M196 170 C188 340 214 520 176 760 L226 760 C258 520 226 340 212 170 Z"/>
+      <path d="M204 170 C150 90 70 80 8 138 C78 118 142 134 204 182 Z"/>
+      <path d="M204 170 C166 70 110 26 34 26 C100 52 150 98 196 184 Z"/>
+      <path d="M204 170 C204 80 232 20 300 0 C258 52 232 102 214 182 Z"/>
+      <path d="M204 170 C260 92 330 80 396 124 C330 114 268 132 212 184 Z"/>
+      <path d="M204 170 C270 140 342 170 382 256 C330 202 270 180 208 188 Z"/>
+      <path d="M204 170 C140 150 66 186 28 268 C78 212 140 190 202 190 Z"/>
+      <path d="M204 170 C170 190 136 250 134 330 C158 268 182 226 208 190 Z"/>
+      <path d="M204 170 C240 190 274 246 280 322 C254 262 228 224 204 190 Z"/>
+    </symbol>
+  </svg>
+
+  <main class="stage">
+    <div class="kicker" id="kicker">The wait is almost over</div>
+    <h1 class="title">GTA VI</h1>
+    <div class="count" id="count"></div>
+    <div class="when" id="when">November 19 · PS5 and Xbox Series X|S</div>
+    <div class="pc">
+      <div class="pc-head"><span>On PC?</span><strong id="pc-status">Not announced</strong></div>
+      <div class="pc-bar"><span id="pc-bar"></span></div>
+      <div class="pc-note"><span id="pc-percent">0%</span> fan port progress · <span id="pc-note">the game isn't out yet</span></div>
+    </div>
+    <div class="fact" id="fact"></div>
+  </main>
+
+  <div class="cta" id="cta"></div>
+  <div class="legal">Unofficial fan countdown. Not affiliated with Rockstar Games, Take-Two, Sony or AnyPS5. No game or download is provided.</div>
+  <script src="gta6.js"></script>
+</body>
+</html>

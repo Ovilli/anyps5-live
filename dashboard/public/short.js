@@ -25,7 +25,7 @@ function beats(state) {
   const target = (Math.floor(progress.done / 1000) + 1) * 1000;
   const pace = progress.week?.done > 0 ? progress.week.done / 7 : null;
   const days = pace ? Math.max(1, Math.round((target - progress.done) / pace)) : null;
-  const highlights = games?.highlights ?? [];
+  const highlights = games?.highlights?.slice(0, 6) ?? [];
   const list = [
     `${highlights.length >= 4 ? `<div class="collage">${highlights.slice(0, 4).map((game) => `<img src="${escape(game.cover)}" alt="">`).join("")}</div>` : ""}
      <div class="headline">PS5 games on PC.<br><span class="up-text">No emulator.</span></div>
