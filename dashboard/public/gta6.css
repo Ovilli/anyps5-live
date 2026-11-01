@@ -1,56 +1,44 @@
-/* An original sunset beach: nothing here comes from the game's own artwork. */
-:root {
-  color-scheme: dark;
-  --ink: #fff8ef;
-  --ink-soft: #ffe3d0;
-  --night: #1b0b33;
-  --hot: #ff4f7b;
-  --gold: #ffc247;
-  --glass: rgba(27, 11, 51, 0.86);
-  --display: "Bebas Neue", "Inter", system-ui, sans-serif;
-  --body: "Inter", system-ui, sans-serif;
-}
-* { box-sizing: border-box; }
-html, body { position: relative; margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--night); color: var(--ink); font-family: var(--body); }
+/* The same look as the AnyPS5 screen (styles.css), with the countdown in the lead. */
+.gta { display: grid; grid-template-rows: 56px 262px 1fr 58px 20px; gap: 14px; width: 1920px; height: 1080px; padding: 18px 28px; }
+.gta-top { display: flex; align-items: center; justify-content: space-between; }
+.gta-live { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 700; color: var(--ink-2); }
+.dot { width: 14px; height: 14px; border-radius: 50%; background: var(--series-8); animation: gta-pulse 2s ease-in-out infinite; }
+@keyframes gta-pulse { 50% { opacity: 0.35; } }
 
-.world { position: absolute; inset: 0; overflow: hidden; }
-.sky { position: absolute; inset: 0; background: linear-gradient(180deg, #2a1259 0%, #6b1f86 24%, #d6336c 48%, #ff7a45 66%, #ffc65c 78%); }
-.sun { position: absolute; left: 660px; top: 500px; width: 600px; height: 600px; border-radius: 50%; background: radial-gradient(circle, #fff3b0 0%, #ffd25e 46%, #ff8f4a 68%, rgba(255, 110, 80, 0) 72%); will-change: opacity; animation: glow 7s ease-in-out infinite; }
-@keyframes glow { 50% { opacity: 0.82; } }
-.cloud { position: absolute; height: 70px; border-radius: 50%; background: radial-gradient(closest-side, rgba(255, 205, 195, 0.42), rgba(255, 205, 195, 0)); will-change: transform; animation: drift linear infinite; }
-.c1 { width: 620px; top: 170px; left: -700px; animation-duration: 150s; }
-.c2 { width: 420px; top: 300px; left: -500px; animation-duration: 110s; animation-delay: -60s; }
-.c3 { width: 760px; top: 440px; left: -800px; animation-duration: 190s; animation-delay: -120s; }
-@keyframes drift { to { transform: translateX(2800px); } }
-.skyline { position: absolute; left: 0; right: 0; bottom: 200px; width: 1920px; height: 150px; fill: #3a1450; }
-.sea { position: absolute; left: 0; right: 0; bottom: 0; height: 200px; background: linear-gradient(180deg, #ff9a5a 0%, #b3366f 34%, #3a1659 100%); overflow: hidden; }
-.glint { position: absolute; left: 50%; height: 7px; border-radius: 4px; background: #fff0b8; opacity: 0.55; will-change: transform; animation: shimmer 5s ease-in-out infinite; }
-.g1 { top: 24px; width: 440px; margin-left: -220px; }
-.g2 { top: 66px; width: 300px; margin-left: -150px; animation-delay: -1.6s; }
-.g3 { top: 112px; width: 180px; margin-left: -90px; animation-delay: -3.2s; }
-@keyframes shimmer { 50% { transform: translateX(46px) scaleX(0.8); } }
-.palm { position: absolute; fill: #16082b; transform-origin: 50% 100%; }
-.palm.left { left: -70px; bottom: -40px; width: 520px; height: 980px; }
-.palm.left2 { left: 200px; bottom: -30px; width: 300px; height: 570px; }
-.palm.right { right: -80px; bottom: -40px; width: 540px; height: 1020px; transform: scaleX(-1); }
-.palm.right2 { right: 210px; bottom: -30px; width: 280px; height: 530px; transform: scaleX(-1); }
+.gta-hero { display: grid; grid-template-columns: 640px 1fr; gap: 16px; min-height: 0; }
+.gta-hero.has-cover { grid-template-columns: auto 560px 1fr; }
+.gta-cover { display: block; height: 262px; max-width: 262px; border-radius: 14px; object-fit: cover; }
+.gta-cover[hidden] { display: none; }
+.gta-port, .gta-clock { justify-content: flex-start; gap: 14px; padding: 18px 26px; }
+.gta-label { font-size: 20px; font-weight: 700; color: var(--muted); }
+.gta-port-row { display: flex; align-items: center; gap: 28px; flex: 1; min-width: 0; }
+.gta-percent { font-size: 112px; font-weight: 800; letter-spacing: -0.03em; line-height: 0.9; }
+.gta-status { font-size: 30px; font-weight: 800; color: var(--series-4); }
+.gta-note { margin-top: 6px; font-size: 20px; line-height: 1.3; color: var(--ink-2); }
+.gta-bar { height: 10px; border-radius: 5px; background: var(--grid); overflow: hidden; }
+.gta-bar > span { display: block; height: 100%; width: 0; background: var(--series-1); }
+.gta-count { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; font-variant-numeric: tabular-nums; }
+.gta-count div { padding: 10px 6px 8px; border-radius: 12px; background: var(--surface-2); text-align: center; }
+.gta-count strong { display: block; font-size: 96px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+.gta-count span { display: block; margin-top: 2px; font-size: 19px; color: var(--muted); }
+.gta-clock .gta-note { margin-top: 0; }
 
-.stage { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; padding-top: 34px; text-shadow: 0 4px 26px rgba(27, 11, 51, 0.6); }
-.kicker { font-family: var(--display); font-size: 58px; letter-spacing: 0.14em; color: var(--ink-soft); }
-.title { margin: -14px 0 -6px; font-family: var(--display); font-size: 270px; font-weight: 400; line-height: 0.95; letter-spacing: 0.02em; }
-.count { display: grid; grid-template-columns: repeat(4, 216px); gap: 20px; text-shadow: none; }
-.count div { padding: 14px 0 12px; border-radius: 20px; background: var(--glass); text-align: center; }
-.count strong { display: block; font-family: var(--display); font-size: 132px; font-weight: 400; line-height: 1; font-variant-numeric: tabular-nums; }
-.count span { display: block; font-size: 25px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); }
-.when { margin-top: 20px; font-size: 38px; font-weight: 800; }
-.pc { width: 800px; margin-top: 20px; padding: 16px 28px 18px; border-radius: 20px; background: var(--glass); text-shadow: none; }
-.pc-head { display: flex; align-items: baseline; justify-content: space-between; font-family: var(--display); font-size: 46px; letter-spacing: 0.04em; }
-.pc-head strong { font-weight: 400; color: var(--gold); }
-.pc-bar { height: 14px; margin: 6px 0 10px; border-radius: 7px; background: rgba(255, 255, 255, 0.2); overflow: hidden; }
-.pc-bar > span { display: block; height: 100%; width: 0; background: var(--hot); }
-.pc-note { font-size: 26px; color: var(--ink-soft); }
-.fact { margin-top: 16px; padding: 8px 26px; border-radius: 14px; background: var(--glass); font-size: 30px; font-weight: 700; text-align: center; text-shadow: none; }
-.fact:empty { visibility: hidden; }
+.gta-grid { display: grid; grid-template-columns: 1180px 1fr; gap: 16px; min-height: 0; }
+.gta-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 12px; }
+.gta-stats strong { display: block; font-size: 44px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+.gta-stats span { display: block; margin-top: 4px; font-size: 18px; color: var(--ink-2); }
+.gta-stats em { font-style: normal; font-weight: 700; color: var(--good); }
+.gta-games { display: flex; flex-direction: column; gap: 10px; }
+.gta-games li { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 18px; padding-bottom: 10px; border-bottom: 1px solid var(--grid); }
+.gta-games li:last-child { border-bottom: 0; }
+.gta-game-name { font-size: 24px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gta-game-stage { font-size: 21px; font-weight: 700; color: var(--good); white-space: nowrap; }
+.gta-game-stage.early { color: var(--series-4); }
+.gta-game-stage.open { color: var(--ink-2); }
+.gta-intro { margin: auto 0 0; font-size: 21px; line-height: 1.35; color: var(--ink-2); }
 
-.cta { position: absolute; left: 50%; bottom: 38px; transform: translateX(-50%); padding: 14px 34px; border-radius: 999px; background: var(--hot); font-size: 32px; font-weight: 800; white-space: nowrap; box-shadow: 0 10px 34px rgba(27, 11, 51, 0.55); }
-.legal { position: absolute; left: 0; right: 0; bottom: 8px; text-align: center; font-size: 17px; color: rgba(255, 248, 239, 0.75); }
+.gta-foot { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 24px; min-width: 0; }
+.gta-latest { min-width: 0; font-size: 22px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gta-latest strong { color: var(--ink); }
+.gta-cta { padding: 10px 24px; border-radius: 12px; background: #351518; border: 2px solid var(--series-8); font-size: 24px; font-weight: 800; white-space: nowrap; }
+.gta-legal { font-size: 15px; color: var(--muted); }
