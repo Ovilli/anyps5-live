@@ -62,9 +62,11 @@ static GAME_STAGE_RULES: LazyLock<[(Regex, usize); 5]> = LazyLock::new(|| {
 });
 static GAME_ID_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[A-Z]{4}\d{5}").unwrap());
 static ROCKSTAR_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\bgta\b|red dead").unwrap());
-static WELL_KNOWN_GAME_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-    r"(?i)elden ring|red dead|persona|silent hill|metal gear|doom|hades|sonic|diablo|007|astro|ghost of|god of war|spider-man|grand theft auto|cyberpunk|resident evil|final fantasy|dragon quest|last of us|minecraft|call of duty|castlevania|ufc|ea sports|gran turismo|demon's souls|horizon|uncharted|ratchet|mortal kombat|street fighter|tekken|assassin's creed"
-).unwrap());
+static WELL_KNOWN_GAME_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?i)elden ring|red dead|persona|silent hill|metal gear|doom|hades|sonic|diablo|007|astro|ghost of|god of war|spider-man|grand theft auto|cyberpunk|resident evil|final fantasy|dragon quest|last of us|minecraft|call of duty|castlevania|ufc|ea sports|gran turismo|demon's souls|horizon|uncharted|ratchet|mortal kombat|street fighter|tekken|assassin's creed"
+    ).unwrap()
+});
 
 struct CurrentState<'a> {
     data: &'a Value,
@@ -395,9 +397,12 @@ const THREADS_QUERY: &str = "query($owner:String!,$name:String!,$category:ID!,$a
 fn sort_game_highlights(highlights: &mut [Value]) {
     highlights.sort_by(|a, b| {
         let known = |game: &Value| WELL_KNOWN_GAME_RE.is_match(game["name"].as_str().unwrap_or(""));
-        known(b)
-            .cmp(&known(a))
-            .then_with(|| b["replies"].as_i64().unwrap_or(0).cmp(&a["replies"].as_i64().unwrap_or(0)))
+        known(b).cmp(&known(a)).then_with(|| {
+            b["replies"]
+                .as_i64()
+                .unwrap_or(0)
+                .cmp(&a["replies"].as_i64().unwrap_or(0))
+        })
     });
 }
 
@@ -1009,7 +1014,8 @@ async fn collect(app: AppState) {
             persisted["prReports"] = Value::Object(cache);
         }
         let mut persist_bytes = None;
-        let search_ok = open_count.is_ok() && week_count.is_ok() && day_count.is_ok() && day_pages_ok;
+        let search_ok =
+            open_count.is_ok() && week_count.is_ok() && day_count.is_ok() && day_pages_ok;
         {
             let mut state = app.data.write().await;
             let now = Utc::now().to_rfc3339();
@@ -1758,7 +1764,10 @@ mod tests {
             covers: Arc::new(RwLock::new(HashMap::new())),
             live_chat_id: Arc::new(RwLock::new(None)),
         };
-        assert_eq!(super::health(State(app.clone())).await.0, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            super::health(State(app.clone())).await.0,
+            StatusCode::SERVICE_UNAVAILABLE
+        );
         state.write().await["progress"] = json!({"done": 100});
         assert_eq!(super::health(State(app)).await.0, StatusCode::OK);
     }
