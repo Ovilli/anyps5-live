@@ -1,0 +1,78 @@
+name: Rust dashboard regression checks
+
+on:
+  push:
+    branches:
+      - feat/rust-dashboard-only
+  pull_request:
+    paths:
+      - 'dashboard/**'
+      - Dockerfile
+      - start.sh
+      - README.md
+      - '.github/workflows/rust-dashboard.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: dashboard
+      - name: Validate locked dependencies, tests, and formatting
+        run: |
+          cargo test --locked --manifest-path dashboard/Cargo.toml
+          cargo fmt --check --manifest-path dashboard/Cargo.toml
+      - name: Build standalone dashboard image
+        run: docker build -t anyps5-dashboard-ci ./dashboard
+      - name: Smoke-test dashboard API and static pages
+        run: |
+          docker run -d --name dashboard-ci -p 127.0.0.1:18080:8080 anyps5-dashboard-ci
+          trap 'docker logs dashboard-ci; docker rm -f dashboard-ci' EXIT
+          ready=0
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:18080/api/state -o /tmp/state.json; then ready=1; break; fi
+            sleep 2
+          done
+          test "$ready" = 1
+          python3 - <<'PY'
+          import json
+          with open("/tmp/state.json", encoding="utf-8") as f:
+              state = json.load(f)
+          for key in ("serverTime", "sources", "progress", "libraries", "github", "games", "events", "youtube", "chat"):
+              assert key in state, key
+          PY
+          curl -fsS http://127.0.0.1:18080/ -o /dev/null
+          curl -fsS http://127.0.0.1:18080/gta6.html -o /dev/null
+          curl -fsS http://127.0.0.1:18080/api/chat -o /dev/null
+          curl -fsS http://127.0.0.1:18080/api/short-meta -o /dev/null
+          curl -fsS -D /tmp/headers http://127.0.0.1:18080/api/state -o /dev/null
+          grep -qi '^cache-control: no-store' /tmp/headers
+
+  combined-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build single-container image using existing FFmpeg streamer
+        run: docker build -t anyps5-combined-ci .
+      - name: Smoke-test single-container dashboard mode
+        run: |
+          docker run -d --name combined-ci -p 127.0.0.1:13000:3000 anyps5-combined-ci
+          trap 'docker logs combined-ci; docker rm -f combined-ci' EXIT
+          ready=0
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:13000/api/state -o /tmp/state.json; then ready=1; break; fi
+            sleep 2
+          done
+          test "$ready" = 1
+          curl -fsS http://127.0.0.1:13000/ -o /dev/null
+          curl -fsS http://127.0.0.1:13000/api/short-meta -o /dev/null
