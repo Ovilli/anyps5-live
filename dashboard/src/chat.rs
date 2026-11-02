@@ -307,11 +307,11 @@ fn game_answer(id: &str, kicker: &str, query: &str, threads: &[Value]) -> Value 
     if (wanted == "grand theft auto 6" || wanted.starts_with("grand theft auto 6 "))
         && found.is_none()
     {
-        let days = (DateTime::parse_from_rfc3339("2026-11-19T00:00:00Z")
+        let remaining_ms = DateTime::parse_from_rfc3339("2026-11-19T00:00:00Z")
             .unwrap()
             .timestamp_millis()
-            - Utc::now().timestamp_millis())
-        .div_euclid(86_400_000);
+            - Utc::now().timestamp_millis();
+        let days = (remaining_ms as f64 / 86_400_000.0).ceil() as i64;
         let meta = if days > 0 {
             format!(
                 "Out in {days} day{} on consoles, so there's nothing to test yet",

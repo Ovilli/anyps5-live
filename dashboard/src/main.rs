@@ -34,6 +34,7 @@ use tower_http::services::ServeDir;
 const YOUTUBE_STATS_REFRESH_SECONDS: u64 = 120;
 const AUTHENTICATED_GITHUB_REFRESH_SECONDS: u64 = 120;
 const UNAUTHENTICATED_GITHUB_REFRESH_SECONDS: u64 = 600;
+const COVER_REFRESH_SECONDS: u64 = 180 * 60;
 static GITHUB_RATE_REMAINING: AtomicI64 = AtomicI64::new(-1);
 static IMPLEMENTED_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"([+−-]\s?\d[\d\s]*) implemented functions?").unwrap());
@@ -61,6 +62,9 @@ static GAME_STAGE_RULES: LazyLock<[(Regex, usize); 5]> = LazyLock::new(|| {
 });
 static GAME_ID_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[A-Z]{4}\d{5}").unwrap());
 static ROCKSTAR_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\bgta\b|red dead").unwrap());
+static WELL_KNOWN_GAME_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
+    r"(?i)elden ring|red dead|persona|silent hill|metal gear|doom|hades|sonic|diablo|007|astro|ghost of|god of war|spider-man|grand theft auto|cyberpunk|resident evil|final fantasy|dragon quest|last of us|minecraft|call of duty|castlevania|ufc|ea sports|gran turismo|demon's souls|horizon|uncharted|ratchet|mortal kombat|street fighter|tekken|assassin's creed"
+).unwrap());
 
 struct CurrentState<'a> {
     data: &'a Value,
@@ -388,6 +392,15 @@ const GAME_STAGES: [&str; 5] = [
 const CATEGORY_QUERY: &str = "query($owner:String!,$name:String!,$slug:String!){repository(owner:$owner,name:$name){discussionCategory(slug:$slug){id}}}";
 const THREADS_QUERY: &str = "query($owner:String!,$name:String!,$category:ID!,$after:String){repository(owner:$owner,name:$name){discussions(first:100,after:$after,categoryId:$category,orderBy:{field:UPDATED_AT,direction:DESC}){pageInfo{endCursor hasNextPage}nodes{number title body createdAt updatedAt comments{totalCount}}}}}";
 
+fn sort_game_highlights(highlights: &mut [Value]) {
+    highlights.sort_by(|a, b| {
+        let known = |game: &Value| WELL_KNOWN_GAME_RE.is_match(game["name"].as_str().unwrap_or(""));
+        known(b)
+            .cmp(&known(a))
+            .then_with(|| b["replies"].as_i64().unwrap_or(0).cmp(&a["replies"].as_i64().unwrap_or(0)))
+    });
+}
+
 fn game_stage(body: &str) -> Option<usize> {
     let answer = GAME_STAGE_HEADER_RE
         .captures(body)?
@@ -440,7 +453,6 @@ async fn collect_games(
     };
     let repo = env::var("ANYPS5_REPO").unwrap_or_else(|_| "boykopovar/AnyPS5".into());
     let (owner, name) = repo.split_once('/').unwrap_or(("boykopovar", "AnyPS5"));
-    let covers = covers.read().await.clone();
     let category = github_graphql(
         client,
         &token,
@@ -493,6 +505,9 @@ async fn collect_games(
         }
         after = connection["pageInfo"]["endCursor"].clone();
     }
+    // Read the cover cache only after GraphQL finishes: the parallel startup
+    // roadmap collector may have populated it while discussions were loading.
+    let covers = covers.read().await.clone();
     let threads: Arc<Vec<Value>> = Arc::new(discussions.iter().map(|d| {
         let title = d["title"].as_str().unwrap_or_default();
         let id = GAME_ID_RE.find(title).map(|m| m.as_str());
@@ -516,7 +531,7 @@ async fn collect_games(
         .filter(|t| t["stage"] == "In game" && !t["cover"].is_null())
         .cloned()
         .collect();
-    highlights.sort_by_key(|t| -t["replies"].as_i64().unwrap_or(0));
+    sort_game_highlights(&mut highlights);
     highlights.truncate(24);
     let mut rockstar: Vec<Value> = threads
         .iter()
@@ -827,6 +842,41 @@ async fn collect(app: AppState) {
                 )
             }
         );
+        // GitHub search returns at most 100 results per page. Upstream paginates
+        // up to 1,000 merged PRs for the daily contributor leaderboard.
+        let mut merged_day_items = Vec::new();
+        let mut day_pages_ok = true;
+        if let Ok(first_page) = &day_count {
+            merged_day_items.extend(first_page["items"].as_array().cloned().unwrap_or_default());
+            let total = first_page["total_count"].as_u64().unwrap_or(0) as usize;
+            for page in 2..=10 {
+                if merged_day_items.len() >= total {
+                    break;
+                }
+                let page_url = format!(
+                    "https://api.github.com/search/issues?per_page=100&page={page}&q={}",
+                    encode(&format!("repo:{repo} is:pr is:merged merged:>={day}"))
+                );
+                match fetch_json(&app.client, &page_url, token.as_deref()).await {
+                    Ok(response) => {
+                        let items = response["items"].as_array().cloned().unwrap_or_default();
+                        if items.is_empty() {
+                            day_pages_ok = false;
+                            break;
+                        }
+                        merged_day_items.extend(items);
+                    }
+                    Err(_) => {
+                        day_pages_ok = false;
+                        break;
+                    }
+                }
+            }
+            // Search is capped at 1,000 results by the upstream implementation.
+            if merged_day_items.len() < total.min(1_000) {
+                day_pages_ok = false;
+            }
+        }
         let mut merged_reports = std::collections::HashMap::<String, Value>::new();
         let mut open_report_values = std::collections::HashMap::<String, Value>::new();
         if let Ok(items) = &pulls {
@@ -959,7 +1009,7 @@ async fn collect(app: AppState) {
             persisted["prReports"] = Value::Object(cache);
         }
         let mut persist_bytes = None;
-        let search_ok = open_count.is_ok() && week_count.is_ok() && day_count.is_ok();
+        let search_ok = open_count.is_ok() && week_count.is_ok() && day_count.is_ok() && day_pages_ok;
         {
             let mut state = app.data.write().await;
             let now = Utc::now().to_rfc3339();
@@ -1154,7 +1204,7 @@ async fn collect(app: AppState) {
                 state["github"]["merged24h"] = count["total_count"].clone();
                 let mut authors: std::collections::HashMap<String, Value> =
                     std::collections::HashMap::new();
-                for pull in count["items"].as_array().into_iter().flatten() {
+                for pull in &merged_day_items {
                     let login = pull["user"]["login"].as_str().unwrap_or("");
                     if login.ends_with("[bot]") {
                         continue;
@@ -1167,7 +1217,9 @@ async fn collect(app: AppState) {
                 let mut authors: Vec<Value> = authors.into_values().collect();
                 authors.sort_by_key(|a| -a["merged"].as_i64().unwrap_or(0));
                 authors.truncate(8);
-                state["github"]["topAuthors"] = json!(authors);
+                if day_pages_ok {
+                    state["github"]["topAuthors"] = json!(authors);
+                }
             }
             if search_ok {
                 state["sources"]["search"] = json!({"ok":true,"at":now});
@@ -1594,7 +1646,7 @@ async fn main() -> Result<()> {
     let data = Arc::new(RwLock::new(json!({
         "updatedAt": started, "startedAt": started, "sources": {}, "progress": null, "history": [],
         "libraries": null,
-        "github": {"openPrs":null,"merged24h":null,"merged7d":null,"mergedPrs":[],"openedPrs":[],"topAuthors":[],"release":null,"rateRemaining":null,"authenticated":env::var("GITHUB_TOKEN").is_ok_and(|x|!x.is_empty())},
+        "github": null,
         "games": null, "events": [],
         "youtube": {"likes": null, "viewers": null, "shorts": env::var("YOUTUBE_REFRESH_TOKEN").is_ok_and(|x| !x.is_empty())},
         "chat": {"enabled": env::var("CHAT_COMMANDS").as_deref() == Ok("1") && env::var("YOUTUBE_API_KEY").is_ok_and(|x| !x.is_empty()) && env::var("YOUTUBE_VIDEO_ID").is_ok_and(|x| !x.is_empty()), "answers": []}
@@ -1629,7 +1681,7 @@ async fn main() -> Result<()> {
         async move {
             loop {
                 collect_covers(&client, data.clone(), covers.clone()).await;
-                tokio::time::sleep(Duration::from_secs(180)).await;
+                tokio::time::sleep(Duration::from_secs(COVER_REFRESH_SECONDS)).await;
             }
         }
     });
@@ -1688,17 +1740,48 @@ mod tests {
         AppState, apply_cache_policy, game_stage, publish_core_progress, report_counts,
         serialize_state,
     };
-    use axum::{body::Body, http::StatusCode, response::Response};
+    use axum::{body::Body, extract::State, http::StatusCode, response::Response};
     use chrono::Utc;
     use serde_json::{Value, json};
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
     use tokio::sync::RwLock;
+
+    #[tokio::test]
+    async fn health_is_unavailable_before_the_first_successful_collection() {
+        let state = Arc::new(RwLock::new(json!({"progress": null, "github": null})));
+        let app = AppState {
+            data: state.clone(),
+            persisted: Arc::new(RwLock::new(json!({}))),
+            data_file: PathBuf::new(),
+            client: reqwest::Client::new(),
+            threads: Arc::new(RwLock::new(Arc::new(Vec::new()))),
+            covers: Arc::new(RwLock::new(HashMap::new())),
+            live_chat_id: Arc::new(RwLock::new(None)),
+        };
+        assert_eq!(super::health(State(app.clone())).await.0, StatusCode::SERVICE_UNAVAILABLE);
+        state.write().await["progress"] = json!({"done": 100});
+        assert_eq!(super::health(State(app)).await.0, StatusCode::OK);
+    }
+
+    #[test]
+    fn well_known_games_precede_niche_threads_even_with_fewer_replies() {
+        let mut highlights = vec![
+            json!({"name":"Unknown Indie Test", "replies":999}),
+            json!({"name":"Elden Ring", "replies":2}),
+            json!({"name":"Astro's Playroom", "replies":15}),
+        ];
+        super::sort_game_highlights(&mut highlights);
+        assert_eq!(highlights[0]["name"], "Astro's Playroom");
+        assert_eq!(highlights[1]["name"], "Elden Ring");
+        assert_eq!(highlights[2]["name"], "Unknown Indie Test");
+    }
 
     #[test]
     fn upstream_polling_budget_and_alert_cadence_are_preserved() {
         assert_eq!(super::YOUTUBE_STATS_REFRESH_SECONDS, 120);
         assert_eq!(super::AUTHENTICATED_GITHUB_REFRESH_SECONDS, 120);
         assert_eq!(super::UNAUTHENTICATED_GITHUB_REFRESH_SECONDS, 600);
+        assert_eq!(super::COVER_REFRESH_SECONDS, 10_800);
         // 720 likes + 1,200 chat reminder + 8,000 chat polling = 9,920 units/day.
         let likes_daily = 24 * 60 * 60 / super::YOUTUBE_STATS_REFRESH_SECONDS * 1;
         assert_eq!(likes_daily + 1_200 + 8_000, 9_920);
