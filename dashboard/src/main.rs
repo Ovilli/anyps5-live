@@ -35,6 +35,8 @@ const YOUTUBE_STATS_REFRESH_SECONDS: u64 = 120;
 const AUTHENTICATED_GITHUB_REFRESH_SECONDS: u64 = 120;
 const UNAUTHENTICATED_GITHUB_REFRESH_SECONDS: u64 = 600;
 const COVER_REFRESH_SECONDS: u64 = 180 * 60;
+// The progress-report bot can comment well after a merge: a missing report is only final after this long.
+const REPORT_WAIT_SECONDS: i64 = 2 * 60 * 60;
 static GITHUB_RATE_REMAINING: AtomicI64 = AtomicI64::new(-1);
 static IMPLEMENTED_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"([+−-]\s?\d[\d\s]*) implemented functions?").unwrap());
@@ -147,8 +149,7 @@ async fn short_meta(State(app): State<AppState>) -> Json<Value> {
     } else {
         format!("+{} functions", formatted(done))
     };
-    let live = env::var("YOUTUBE_VIDEO_ID")
-        .ok()
+    let live = env_set("YOUTUBE_VIDEO_ID")
         .map(|id| format!("\n\nWatch it live, 24/7: https://www.youtube.com/watch?v={id}"))
         .unwrap_or_default();
     Json(json!({
@@ -157,7 +158,7 @@ async fn short_meta(State(app): State<AppState>) -> Json<Value> {
             "description": format!("AnyPS5 is a community project that converts PS5 games to run natively on Windows and Linux, with no emulator. Reaching gameplay does not mean a game is playable from start to finish yet. This is today's progress.{live}\n\nAn unofficial community project, not affiliated with the AnyPS5 maintainers or with Sony."),
             "tags": ["AnyPS5", "PS5", "emulation"], "categoryId": "20"
         },
-        "status": {"privacyStatus": env::var("SHORT_PRIVACY").unwrap_or_else(|_| "public".into()), "selfDeclaredMadeForKids": false}
+        "status": {"privacyStatus": env_set("SHORT_PRIVACY").unwrap_or_else(|| "public".into()), "selfDeclaredMadeForKids": false}
     }))
 }
 
@@ -170,11 +171,31 @@ async fn health(State(app): State<AppState>) -> (axum::http::StatusCode, &'stati
     }
 }
 
-async fn mark_source_error(data: &Arc<RwLock<Value>>, source: &str, error: &str) {
-    let mut state = data.write().await;
+fn env_set(name: &str) -> Option<String> {
+    env::var(name).ok().filter(|value| !value.is_empty())
+}
+
+fn report_source_error(state: &mut Value, source: &str, error: &str) {
+    eprintln!("[{source}] {error}");
     let at = state["sources"][source]["at"].clone();
     state["sources"][source] = json!({"ok":false,"at":at,"error":error});
     state["updatedAt"] = json!(Utc::now().to_rfc3339());
+}
+
+async fn mark_source_error(data: &Arc<RwLock<Value>>, source: &str, error: &str) {
+    report_source_error(&mut *data.write().await, source, error);
+}
+
+// The page only needs the most recent events; the rest stays in the saved state.
+fn recent_events(events: &Value) -> Value {
+    json!(
+        events
+            .as_array()
+            .into_iter()
+            .flatten()
+            .take(60)
+            .collect::<Vec<_>>()
+    )
 }
 
 fn apply_cache_policy(path: &str, response: &mut axum::response::Response) {
@@ -315,6 +336,9 @@ async fn fetch_reports_concurrently(
         tasks.spawn(async move {
             let _permit = permit;
             let report = fetch_report(&client, &repo, number, token.as_deref()).await;
+            if let Err(error) = &report {
+                eprintln!("[github] report of #{number}: {error:#}");
+            }
             (number, report)
         });
     }
@@ -331,7 +355,7 @@ async fn youtube_stats(
     data: Arc<RwLock<Value>>,
     live_chat_id: Arc<RwLock<Option<String>>>,
 ) {
-    let (Ok(key), Ok(video)) = (env::var("YOUTUBE_API_KEY"), env::var("YOUTUBE_VIDEO_ID")) else {
+    let (Some(key), Some(video)) = (env_set("YOUTUBE_API_KEY"), env_set("YOUTUBE_VIDEO_ID")) else {
         return;
     };
     loop {
@@ -376,9 +400,7 @@ async fn youtube_stats(
             Err(e) => Err(e.into()),
         };
         if let Err(error) = updated {
-            let mut state = data.write().await;
-            let at = state["sources"]["youtube"]["at"].clone();
-            state["sources"]["youtube"] = json!({"ok":false,"at":at,"error":error.to_string()});
+            mark_source_error(&data, "youtube", &format!("{error:#}")).await;
         }
         tokio::time::sleep(Duration::from_secs(YOUTUBE_STATS_REFRESH_SECONDS)).await;
     }
@@ -670,19 +692,19 @@ async fn publish_core_progress(app: &AppState, progress: &Result<Value>, history
             let current_total = group["total"].as_i64().unwrap_or(0);
             let current_done = group["done"].as_i64().unwrap_or(0);
             let Some(old) = previous["libraries"][name].as_array() else {
-                changes.push(json!({"time":now_text,"kind":"discovery","title":format!("New library: {name}"),"detail":format!("{current_total} exports declared, {current_done} already implemented.")}));
+                changes.push(json!({"time":now_text,"kind":"discovery","title":format!("New library: {name}"),"detail":format!("{} exports declared, {} already implemented.",formatted(current_total),formatted(current_done))}));
                 continue;
             };
             let old_done = old[0].as_i64().unwrap_or(0);
             let old_total = old[1].as_i64().unwrap_or(0);
             if current_total - old_total >= 5 {
-                changes.push(json!({"time":now_text,"kind":"discovery","title":format!("{name}: +{} exports discovered",current_total-old_total)}));
+                changes.push(json!({"time":now_text,"kind":"discovery","title":format!("{name}: +{} exports discovered",formatted(current_total-old_total))}));
             }
             if current_done - old_done >= 25 {
-                changes.push(json!({"time":now_text,"kind":"library","title":format!("{name}: +{} functions implemented",current_done-old_done)}));
+                changes.push(json!({"time":now_text,"kind":"library","title":format!("{name}: +{} functions implemented",formatted(current_done-old_done))}));
             }
             if current_total > 0 && current_done == current_total && old_done < old_total {
-                changes.push(json!({"time":now_text,"kind":"complete","title":format!("{name} reached 100%"),"detail":format!("{current_total} of {current_total} functions.")}));
+                changes.push(json!({"time":now_text,"kind":"complete","title":format!("{name} reached 100%"),"detail":format!("{} of {} functions.",formatted(current_total),formatted(current_total))}));
             }
         }
         insert_events(&mut preview, changes);
@@ -742,7 +764,7 @@ async fn publish_core_progress(app: &AppState, progress: &Result<Value>, history
             })
             .unwrap_or(Value::Null)
     };
-    let progress_view = json!({
+    let mut progress_view = json!({
         "done":progress["libraries"]["done"], "total":progress["libraries"]["total"],
         "percent":progress["libraries"]["percent"], "shadersDone":progress["shaders"]["done"],
         "shadersTotal":progress["shaders"]["total"], "shadersPercent":progress["shaders"]["percent"],
@@ -764,17 +786,18 @@ async fn publish_core_progress(app: &AppState, progress: &Result<Value>, history
             })).collect::<Vec<_>>())
         });
     let mut state = app.data.write().await;
+    if history.is_err() {
+        progress_view["day"] = state["progress"]["day"].clone();
+        progress_view["week"] = state["progress"]["week"].clone();
+    }
     state["progress"] = progress_view;
     state["libraries"] = libraries_view;
-    state["events"] = preview["events"].clone();
+    state["events"] = recent_events(&preview["events"]);
     state["sources"]["progress"] = json!({"ok":true,"at":now_text});
     state["updatedAt"] = json!(now_text);
     if let Some(history_view) = history_view {
         state["history"] = history_view;
         state["sources"]["history"] = json!({"ok":true,"at":now_text});
-    } else {
-        state["sources"]["history"] =
-            json!({"ok":false,"at":null,"error":"history source unavailable"});
     }
 }
 
@@ -887,13 +910,14 @@ async fn collect(app: AppState) {
         if let Ok(items) = &pulls {
             let existing = app.persisted.read().await["prReports"].clone();
             let mut pending = Vec::new();
-            for pull in items
+            let mut merged: Vec<&Value> = items
                 .as_array()
                 .into_iter()
                 .flatten()
                 .filter(|p| !p["merged_at"].is_null())
-                .take(if token.is_some() { 14 } else { 2 })
-            {
+                .collect();
+            merged.sort_by(|a, b| b["merged_at"].as_str().cmp(&a["merged_at"].as_str()));
+            for pull in merged.into_iter().take(14) {
                 let Some(number) = pull["number"].as_i64() else {
                     continue;
                 };
@@ -911,6 +935,7 @@ async fn collect(app: AppState) {
                 };
                 merged_reports.insert(key, report);
             }
+            pending.truncate(if token.is_some() { 14 } else { 2 });
             let rate_remaining = GITHUB_RATE_REMAINING.load(Ordering::Relaxed);
             let fetched = if rate_remaining < 0 || rate_remaining >= 10 {
                 fetch_reports_concurrently(
@@ -929,7 +954,7 @@ async fn collect(app: AppState) {
             let now = Utc::now().timestamp();
             for (key, number, merged_at) in pending {
                 if let Some(Ok(report)) = fetched.get(&number) {
-                    if report.is_some() || now - merged_at > 120 {
+                    if report.is_some() || now - merged_at > REPORT_WAIT_SECONDS {
                         merged_reports.insert(key, report.clone().unwrap_or(Value::Null));
                     }
                 }
@@ -1013,12 +1038,42 @@ async fn collect(app: AppState) {
             }
             persisted["prReports"] = Value::Object(cache);
         }
-        let mut persist_bytes = None;
+        let release_fallback = if release.is_err() {
+            let url = format!(
+                "{}/release.json?{}",
+                pages.trim_end_matches('/'),
+                Utc::now().timestamp_millis()
+            );
+            fetch_json(&app.client, &url, None).await.ok()
+        } else {
+            None
+        };
         let search_ok =
             open_count.is_ok() && week_count.is_ok() && day_count.is_ok() && day_pages_ok;
         {
             let mut state = app.data.write().await;
             let now = Utc::now().to_rfc3339();
+            // The page reads these lists as soon as github exists, whichever request failed.
+            if state["github"].is_null() {
+                state["github"] = json!({
+                    "stars":0,"openPrs":null,"merged24h":null,"merged7d":null,"mergedPrs":[],"openedPrs":[],
+                    "topAuthors":[],"release":null,"rateRemaining":null,"authenticated":token.is_some()
+                });
+            }
+            for (source, result) in [
+                ("progress", &progress),
+                ("history", &history),
+                ("repo", &repository),
+                ("github", &pulls),
+            ] {
+                if let Err(error) = result {
+                    report_source_error(&mut state, source, &format!("{error:#}"));
+                }
+            }
+            let search_error = [&open_count, &week_count, &day_count]
+                .into_iter()
+                .find_map(|result| result.as_ref().err())
+                .map(|error| format!("{error:#}"));
             if let Ok(progress) = progress {
                 let history_points = history
                     .as_ref()
@@ -1026,6 +1081,12 @@ async fn collect(app: AppState) {
                     .and_then(Value::as_array)
                     .cloned()
                     .unwrap_or_default();
+                let kept_deltas = history.is_err().then(|| {
+                    (
+                        state["progress"]["day"].clone(),
+                        state["progress"]["week"].clone(),
+                    )
+                });
                 let delta = |days: i64| {
                     let date = (Utc::now() - chrono::Duration::days(days))
                         .format("%Y-%m-%d")
@@ -1042,6 +1103,10 @@ async fn collect(app: AppState) {
                     "shadersTotal": progress["shaders"]["total"], "shadersPercent": progress["shaders"]["percent"],
                     "day": delta(1), "week": delta(7)
                 });
+                if let Some((day, week)) = kept_deltas {
+                    state["progress"]["day"] = day;
+                    state["progress"]["week"] = week;
+                }
                 let groups = progress["libraries"]["groups"]
                     .as_array()
                     .cloned()
@@ -1096,23 +1161,23 @@ async fn collect(app: AppState) {
                         let current_done = group["done"].as_i64().unwrap_or(0);
                         let old = previous["libraries"][name].as_array();
                         if old.is_none() {
-                            changes.push(json!({"time":now,"kind":"discovery","title":format!("New library: {name}"),"detail":format!("{current_total} exports declared, {current_done} already implemented.")}));
+                            changes.push(json!({"time":now,"kind":"discovery","title":format!("New library: {name}"),"detail":format!("{} exports declared, {} already implemented.",formatted(current_total),formatted(current_done))}));
                             continue;
                         }
                         let old = old.unwrap();
                         let old_done = old[0].as_i64().unwrap_or(0);
                         let old_total = old[1].as_i64().unwrap_or(0);
                         if current_total - old_total >= 5 {
-                            changes.push(json!({"time":now,"kind":"discovery","title":format!("{name}: +{} exports discovered",current_total-old_total)}));
+                            changes.push(json!({"time":now,"kind":"discovery","title":format!("{name}: +{} exports discovered",formatted(current_total-old_total))}));
                         }
                         if current_done - old_done >= 25 {
-                            changes.push(json!({"time":now,"kind":"library","title":format!("{name}: +{} functions implemented",current_done-old_done)}));
+                            changes.push(json!({"time":now,"kind":"library","title":format!("{name}: +{} functions implemented",formatted(current_done-old_done))}));
                         }
                         if current_total > 0
                             && current_done == current_total
                             && old_done < old_total
                         {
-                            changes.push(json!({"time":now,"kind":"complete","title":format!("{name} reached 100%"),"detail":format!("{current_total} of {current_total} functions.")}));
+                            changes.push(json!({"time":now,"kind":"complete","title":format!("{name} reached 100%"),"detail":format!("{} of {} functions.",formatted(current_total),formatted(current_total))}));
                         }
                     }
                     insert_events(&mut persisted, changes);
@@ -1125,8 +1190,7 @@ async fn collect(app: AppState) {
                 }).collect()).unwrap_or_default();
                 movers.sort_by_key(|m| -m["gained"].as_i64().unwrap_or(0));
                 movers.truncate(8);
-                persist_bytes = serde_json::to_vec(&*persisted).ok();
-                let current_events = persisted["events"].clone();
+                let current_events = recent_events(&persisted["events"]);
                 drop(persisted);
                 let mut all = summaries.clone();
                 all.retain(|g| g["total"].as_i64().unwrap_or(0) > 0);
@@ -1148,9 +1212,6 @@ async fn collect(app: AppState) {
                 state["libraries"] = json!({"count":summaries.len(),"complete":complete,"started":started,"untouched":untouched,"biggest":biggest,"all":all,"movers":movers,"moversSince":reference.as_ref().and_then(|x|x["date"].as_str())});
                 state["events"] = current_events;
                 state["sources"]["progress"] = json!({"ok":true,"at":now});
-            } else {
-                state["sources"]["progress"] =
-                    json!({"ok":false,"at":null,"error":"progress source unavailable"});
             }
             if let Ok(history) = history {
                 state["history"]=json!(history.as_array().into_iter().flatten().map(|e|json!({
@@ -1158,9 +1219,6 @@ async fn collect(app: AppState) {
                     "percent":e["libraries"]["percent"],"shadersDone":e["shaders"]["done"],"shadersTotal":e["shaders"]["total"]
                 })).collect::<Vec<_>>());
                 state["sources"]["history"] = json!({"ok":true,"at":now});
-            } else {
-                state["sources"]["history"] =
-                    json!({"ok":false,"at":null,"error":"history source unavailable"});
             }
             if let Ok(repository) = repository {
                 state["github"]["stars"] = repository["stargazers_count"].clone();
@@ -1172,9 +1230,6 @@ async fn collect(app: AppState) {
                     json!(remaining)
                 };
                 state["sources"]["repo"] = json!({"ok":true,"at":now});
-            } else {
-                state["sources"]["repo"] =
-                    json!({"ok":false,"at":null,"error":"GitHub repository unavailable"});
             }
             if let Ok(pulls) = pulls {
                 let mut merged: Vec<Value> = pulls
@@ -1190,9 +1245,6 @@ async fn collect(app: AppState) {
                     "mergedAt":p["merged_at"],"report":merged_reports.get(&p["number"].as_i64().unwrap_or(0).to_string()).filter(|v| !v.is_null()).cloned().unwrap_or(Value::Null)
                 })).collect::<Vec<_>>());
                 state["sources"]["github"] = json!({"ok":true,"at":now});
-            } else {
-                state["sources"]["github"] =
-                    json!({"ok":false,"at":null,"error":"GitHub pull requests unavailable"});
             }
             if let Ok(pulls) = open_pulls {
                 state["github"]["openedPrs"]=json!(pulls.as_array().into_iter().flatten().filter(|p|p["draft"]!=true).take(6).map(|p|json!({
@@ -1230,9 +1282,13 @@ async fn collect(app: AppState) {
             if search_ok {
                 state["sources"]["search"] = json!({"ok":true,"at":now});
             } else {
-                let at = state["sources"]["search"]["at"].clone();
-                state["sources"]["search"] =
-                    json!({"ok":false,"at":at,"error":"GitHub search unavailable"});
+                report_source_error(
+                    &mut state,
+                    "search",
+                    search_error
+                        .as_deref()
+                        .unwrap_or("GitHub search pages incomplete"),
+                );
             }
             if let Ok(release) = release {
                 state["github"]["release"] =
@@ -1253,6 +1309,8 @@ async fn collect(app: AppState) {
                 if !tag.is_empty() {
                     persisted["releaseTag"] = json!(tag);
                 }
+            } else if let Some(fallback) = release_fallback {
+                state["github"]["release"] = json!({"tag":fallback["tag"],"publishedAt":null});
             }
             state["youtube"]["shorts"] = json!(
                 env::var("YOUTUBE_REFRESH_TOKEN")
@@ -1261,12 +1319,7 @@ async fn collect(app: AppState) {
             );
             state["updatedAt"] = json!(now);
         }
-        if let Some(bytes) = persist_bytes {
-            let temporary = app.data_file.with_extension("json.tmp");
-            if fs::write(&temporary, bytes).await.is_ok() {
-                let _ = fs::rename(temporary, &app.data_file).await;
-            }
-        }
+        save_persisted(&app).await;
         // Authenticated activity cards refresh at upstream's two minute cadence;
         // the remaining GitHub API work shares this loop and stays within quota.
         tokio::time::sleep(Duration::from_secs(if token.is_some() {
@@ -1279,15 +1332,27 @@ async fn collect(app: AppState) {
 }
 
 async fn save_persisted(app: &AppState) {
+    // Several tasks save: two writers on one temporary file could publish a truncated state.
+    static SAVING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    let _saving = SAVING.lock().await;
     let bytes = {
         let persisted = app.persisted.read().await;
         serde_json::to_vec(&*persisted)
     };
-    if let Ok(bytes) = bytes {
-        let temporary = app.data_file.with_extension("json.tmp");
-        if fs::write(&temporary, bytes).await.is_ok() {
-            let _ = fs::rename(temporary, &app.data_file).await;
+    let saved = match bytes {
+        Ok(bytes) => {
+            let temporary = app.data_file.with_extension("json.tmp");
+            match fs::write(&temporary, bytes).await {
+                Ok(()) => fs::rename(temporary, &app.data_file)
+                    .await
+                    .map_err(anyhow::Error::from),
+                Err(error) => Err(error.into()),
+            }
         }
+        Err(error) => Err(error.into()),
+    };
+    if let Err(error) = saved {
+        eprintln!("[state] save failed: {error:#}");
     }
 }
 
@@ -1353,7 +1418,7 @@ async fn answer_chat_messages(
 }
 
 async fn chat_loop(app: AppState) {
-    let Ok(key) = env::var("YOUTUBE_API_KEY") else {
+    let Some(key) = env_set("YOUTUBE_API_KEY") else {
         return;
     };
     let daily_units = env::var("CHAT_DAILY_UNITS")
@@ -1401,6 +1466,7 @@ async fn chat_loop(app: AppState) {
         match chat::open_stream(&key, &live_id, page_token.as_deref()).await {
             Ok((mut stream, _channel)) => {
                 let mut skip_history = page_token.is_none();
+                let mut failed = false;
                 loop {
                     match stream.message().await {
                         Ok(Some(response)) => {
@@ -1417,19 +1483,22 @@ async fn chat_loop(app: AppState) {
                         }
                         Ok(None) => break,
                         Err(error) => {
-                            let mut state = app.data.write().await;
-                            state["sources"]["chat"] = json!({"ok":false,"at":null,"error":format!("YouTube chat stream {error}")});
+                            let message = format!("YouTube chat stream {error}");
+                            mark_source_error(&app.data, "chat", &message).await;
                             burst_until = 0;
+                            failed = true;
                             break;
                         }
                     }
                 }
-                let mut state = app.data.write().await;
-                state["sources"]["chat"] = json!({"ok":true,"at":Utc::now().to_rfc3339()});
+                if !failed {
+                    let mut state = app.data.write().await;
+                    state["sources"]["chat"] = json!({"ok":true,"at":Utc::now().to_rfc3339()});
+                }
             }
             Err(error) => {
-                app.data.write().await["sources"]["chat"] =
-                    json!({"ok":false,"at":null,"error":format!("YouTube chat stream {error:#}")});
+                let message = format!("YouTube chat stream {error:#}");
+                mark_source_error(&app.data, "chat", &message).await;
                 burst_until = 0;
             }
         }
@@ -1440,10 +1509,10 @@ async fn chat_loop(app: AppState) {
 }
 
 async fn chat_reminder(app: AppState) {
-    let (Ok(client_id), Ok(secret), Ok(refresh)) = (
-        env::var("YOUTUBE_CLIENT_ID"),
-        env::var("YOUTUBE_CLIENT_SECRET"),
-        env::var("YOUTUBE_REFRESH_TOKEN"),
+    let (Some(client_id), Some(secret), Some(refresh)) = (
+        env_set("YOUTUBE_CLIENT_ID"),
+        env_set("YOUTUBE_CLIENT_SECRET"),
+        env_set("YOUTUBE_REFRESH_TOKEN"),
     ) else {
         return;
     };
@@ -1496,17 +1565,21 @@ async fn chat_reminder(app: AppState) {
         _ => None,
     };
     let Some(token) = tokens else {
-        app.data.write().await["sources"]["chatReminder"] =
-            json!({"ok":false,"at":null,"error":"Google token refresh failed"});
+        mark_source_error(&app.data, "chatReminder", "Google token refresh failed").await;
         return;
     };
     let response = app.client.post("https://www.googleapis.com/youtube/v3/liveChat/messages?part=snippet").bearer_auth(token).json(&json!({"snippet":{"liveChatId":live_id,"type":"textMessageEvent","textMessageDetails":{"messageText":chat::CHAT_REMINDER}}})).send().await;
-    let mut state = app.data.write().await;
-    state["sources"]["chatReminder"] = match response {
-        Ok(r) if r.status().is_success() => json!({"ok":true,"at":Utc::now().to_rfc3339()}),
-        Ok(r) => json!({"ok":false,"at":null,"error":format!("YouTube chat post {}",r.status())}),
-        Err(e) => json!({"ok":false,"at":null,"error":e.to_string()}),
-    };
+    match response {
+        Ok(r) if r.status().is_success() => {
+            app.data.write().await["sources"]["chatReminder"] =
+                json!({"ok":true,"at":Utc::now().to_rfc3339()});
+        }
+        Ok(r) => {
+            let message = format!("YouTube chat post {}", r.status());
+            mark_source_error(&app.data, "chatReminder", &message).await;
+        }
+        Err(e) => mark_source_error(&app.data, "chatReminder", &e.to_string()).await,
+    }
 }
 
 fn encode(input: &str) -> String {
@@ -1552,10 +1625,10 @@ fn history_events(history: &[Value]) -> Vec<Value> {
         let date = current["date"].as_str().unwrap_or_default();
         let time = format!("{date}T12:00:00Z");
         if discovered >= 300 {
-            events.push(json!({"time":time,"kind":"discovery","title":format!("{} PS5 exports declared",formatted(discovered)),"detail":format!("The tracked total grew from {} to {} functions.",formatted(old_total),formatted(total))}));
+            events.push(json!({"time":time,"kind":"discovery","title":format!("+{} PS5 exports declared",formatted(discovered)),"detail":format!("The tracked total grew from {} to {} functions.",formatted(old_total),formatted(total))}));
         }
         if gained >= 150 {
-            events.push(json!({"time":time,"kind":"jump","title":format!("{} functions implemented in a single day",formatted(gained)),"detail":format!("{} → {} functions done.",formatted(old_done),formatted(done))}));
+            events.push(json!({"time":time,"kind":"jump","title":format!("+{} functions implemented in a single day",formatted(gained)),"detail":format!("{} → {} functions done.",formatted(old_done),formatted(done))}));
         }
         let pct = current["libraries"]["percent"].as_f64().unwrap_or(0.0);
         let old_pct = previous["libraries"]["percent"].as_f64().unwrap_or(0.0);
@@ -1730,6 +1803,21 @@ async fn main() -> Result<()> {
             });
         }
     }
+    tokio::spawn({
+        let app = app.clone();
+        async move {
+            use tokio::signal::unix::{SignalKind, signal};
+            let Ok(mut terminate) = signal(SignalKind::terminate()) else {
+                return;
+            };
+            tokio::select! {
+                _ = terminate.recv() => {}
+                _ = tokio::signal::ctrl_c() => {}
+            }
+            save_persisted(&app).await;
+            std::process::exit(0);
+        }
+    });
     let public = env::var("PUBLIC_DIR").unwrap_or_else(|_| "./public".into());
     let router = Router::new()
         .route("/api/state", get(state))
@@ -1818,6 +1906,40 @@ mod tests {
             let body = format!("## Furthest point\n\n{answer}");
             assert_eq!(game_stage(&body), expected, "{answer}");
         }
+    }
+
+    #[test]
+    fn history_events_keep_their_sign_and_grouping() {
+        let events = super::history_events(&[
+            json!({"date":"2026-10-01","libraries":{"done":1000,"total":5000,"percent":20.0},"shaders":{"done":0,"total":0}}),
+            json!({"date":"2026-10-02","libraries":{"done":1493,"total":6578,"percent":22.7},"shaders":{"done":0,"total":0}}),
+        ]);
+        let titles: Vec<&str> = events.iter().filter_map(|e| e["title"].as_str()).collect();
+        assert!(
+            titles.contains(&"+1,578 PS5 exports declared"),
+            "{titles:?}"
+        );
+        assert!(
+            titles.contains(&"+493 functions implemented in a single day"),
+            "{titles:?}"
+        );
+    }
+
+    #[test]
+    fn a_source_failure_keeps_its_last_good_time() {
+        let mut state = json!({"sources":{"chat":{"ok":true,"at":"then"}}});
+        super::report_source_error(&mut state, "chat", "YouTube chat stream 403");
+        assert_eq!(state["sources"]["chat"]["ok"], false);
+        assert_eq!(state["sources"]["chat"]["at"], "then");
+        assert_eq!(state["sources"]["chat"]["error"], "YouTube chat stream 403");
+    }
+
+    #[test]
+    fn the_page_gets_only_the_recent_events() {
+        let events = json!((0..200).collect::<Vec<_>>());
+        let recent = super::recent_events(&events);
+        assert_eq!(recent.as_array().unwrap().len(), 60);
+        assert_eq!(recent[0], 0);
     }
 
     #[test]

@@ -2,8 +2,10 @@ FROM rust:1-bookworm AS build
 WORKDIR /build
 COPY Cargo.toml ./
 COPY Cargo.lock ./
+# The dependencies get their own layer: changing the sources does not recompile them.
+RUN mkdir src && echo 'fn main() {}' > src/main.rs && cargo build --locked --release && rm -r src
 COPY src ./src
-RUN cargo build --locked --release
+RUN touch src/main.rs && cargo build --locked --release
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget \

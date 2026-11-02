@@ -3,8 +3,12 @@
 FROM rust:1-bookworm AS build
 WORKDIR /build
 COPY dashboard/Cargo.toml dashboard/Cargo.lock ./dashboard/
+# The dependencies get their own layer: changing the sources does not recompile them.
+RUN mkdir dashboard/src && echo 'fn main() {}' > dashboard/src/main.rs \
+ && cargo build --locked --release --manifest-path dashboard/Cargo.toml \
+ && rm -r dashboard/src
 COPY dashboard/src ./dashboard/src
-RUN cargo build --locked --release --manifest-path dashboard/Cargo.toml
+RUN touch dashboard/src/main.rs && cargo build --locked --release --manifest-path dashboard/Cargo.toml
 
 FROM node:22-bookworm-slim
 
@@ -18,7 +22,6 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=build /build/dashboard/target/release/anyps5-live-dashboard /usr/local/bin/dashboard
 COPY dashboard/public ./public
-COPY dashboard/proto ./proto
 COPY streamer/entrypoint.sh /usr/local/bin/streamer.sh
 COPY streamer/shorts.sh /usr/local/bin/shorts.sh
 COPY start.sh /usr/local/bin/start.sh

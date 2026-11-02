@@ -3,7 +3,7 @@ name: Rust dashboard regression checks
 on:
   push:
     branches:
-      - feat/rust-dashboard-only
+      - main
   pull_request:
     paths:
       - 'dashboard/**'

@@ -7,6 +7,8 @@ edition = "2024"
 strip = "symbols"
 lto = "thin"
 codegen-units = 1
+# A panicking task would otherwise stop alone while /healthz stays green. The container restarts instead.
+panic = "abort"
 
 [dependencies]
 anyhow = "1"

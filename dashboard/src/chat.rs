@@ -298,8 +298,7 @@ fn game_answer(id: &str, kicker: &str, query: &str, threads: &[Value]) -> Value 
                 *s,
                 STAGES
                     .iter()
-                    .position(|x| Some(*x) == thread["stage"].as_str())
-                    .unwrap_or(0),
+                    .position(|x| Some(*x) == thread["stage"].as_str()),
                 thread["replies"].as_i64().unwrap_or(0),
             )
         })

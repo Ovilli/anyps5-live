@@ -28,7 +28,7 @@ The dashboard scene shows:
 
 ```
                  ┌──────────────────────────────┐        ┌──────────────────────────────────┐
- GitHub API ───► │ dashboard (Rust/Axum)          │  HTTP  │ streamer                         │  RTMP
+ GitHub API ───► │ dashboard (Rust/Axum)        │  HTTP  │ streamer                         │  RTMP
  Pages JSON ───► │ collects, detects events,    │ ─────► │ Xvfb + Chromium (kiosk 1920×1080)│ ─────► YouTube
  Discussions ──► │ serves / and /api/state      │        │ ffmpeg x11grab → H.264 + AAC     │
                  │ volume: daily snapshots      │        │ restarts itself on failure       │
