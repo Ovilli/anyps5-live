@@ -86,8 +86,7 @@ duration=()
 gop=$(( FPS * 2 ))
 
 encode() {
-  # One filter thread lowers the CPU further but saturates ffmpeg's main thread at 1440p: YouTube reports poor health.
-  ffmpeg -filter_threads 2 -hide_banner -loglevel warning -nostats -y \
+  ffmpeg -hide_banner -loglevel warning -nostats -y \
     -thread_queue_size 512 -f x11grab -draw_mouse 0 -framerate "$CAPTURE_FPS" -video_size "${WIDTH}x${HEIGHT}" -i "${DISPLAY}.0" \
     "${audio[@]}" \
     -map 0:v -map 1:a \
