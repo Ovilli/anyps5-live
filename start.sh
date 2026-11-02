@@ -12,7 +12,7 @@ if [ "$(id -u)" = 0 ]; then
 fi
 
 export DASHBOARD_URL="http://127.0.0.1:${PORT}/"
-node /app/dist/server.js &
+/usr/local/bin/dashboard &
 
 if [ -z "${YOUTUBE_STREAM_KEY:-}" ] && [ -z "${OUTPUT:-}" ]; then
   echo "[start] YOUTUBE_STREAM_KEY is not set: serving the dashboard only, nothing is streamed."

@@ -1,11 +1,14 @@
 # Single-container image: the dashboard and the streamer in one container, for platforms that
 # build one Dockerfile and run one service. docker-compose.yml runs them as two containers instead.
-FROM node:22-bookworm-slim AS build
-WORKDIR /app
-COPY dashboard/package.json dashboard/package-lock.json dashboard/tsconfig.json ./
-RUN npm ci --no-audit --no-fund
-COPY dashboard/src ./src
-RUN npx tsc -p tsconfig.json
+FROM rust:1-bookworm AS build
+WORKDIR /build
+COPY dashboard/Cargo.toml dashboard/Cargo.lock ./dashboard/
+# The dependencies get their own layer: changing the sources does not recompile them.
+RUN mkdir dashboard/src && echo 'fn main() {}' > dashboard/src/main.rs \
+ && cargo build --locked --release --manifest-path dashboard/Cargo.toml \
+ && rm -r dashboard/src
+COPY dashboard/src ./dashboard/src
+RUN touch dashboard/src/main.rs && cargo build --locked --release --manifest-path dashboard/Cargo.toml
 
 FROM node:22-bookworm-slim
 
@@ -17,11 +20,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY dashboard/package.json dashboard/package-lock.json ./
-RUN npm ci --omit=dev --no-audit --no-fund
-COPY --from=build /app/dist ./dist
+COPY --from=build /build/dashboard/target/release/anyps5-live-dashboard /usr/local/bin/dashboard
 COPY dashboard/public ./public
-COPY dashboard/proto ./proto
 COPY streamer/entrypoint.sh /usr/local/bin/streamer.sh
 COPY streamer/shorts.sh /usr/local/bin/shorts.sh
 COPY start.sh /usr/local/bin/start.sh
@@ -29,8 +29,8 @@ RUN chmod 0755 /usr/local/bin/streamer.sh /usr/local/bin/shorts.sh /usr/local/bi
  && mkdir -p /data /music /recordings \
  && chown node:node /data /recordings
 
-ENV NODE_ENV=production \
-    DATA_DIR=/data \
+ENV DATA_DIR=/data \
+    PUBLIC_DIR=/app/public \
     PORT=3000 \
     WIDTH=2560 \
     HEIGHT=1440 \
