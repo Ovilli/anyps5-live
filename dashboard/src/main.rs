@@ -145,7 +145,7 @@ async fn short_meta(State(app): State<AppState>) -> Json<Value> {
     let gain = if data["progress"]["day"].is_null() {
         "progress".to_string()
     } else {
-        format!("+{done} functions")
+        format!("+{} functions", formatted(done))
     };
     let live = env::var("YOUTUBE_VIDEO_ID")
         .ok()
