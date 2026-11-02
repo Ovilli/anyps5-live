@@ -1680,14 +1680,20 @@ async fn main() -> Result<()> {
         let live_chat_id = app.live_chat_id.clone();
         async move { youtube_stats(&client, data, live_chat_id).await }
     });
+    // Node startup loads the roadmap before games, so cover art is present
+    // when the first discussions snapshot is constructed.
+    let covers_ready = Arc::new(tokio::sync::Notify::new());
     tokio::spawn({
         let client = app.client.clone();
         let data = app.data.clone();
         let covers = app.covers.clone();
+        let covers_ready = covers_ready.clone();
         async move {
+            collect_covers(&client, data.clone(), covers.clone()).await;
+            covers_ready.notify_one();
             loop {
-                collect_covers(&client, data.clone(), covers.clone()).await;
                 tokio::time::sleep(Duration::from_secs(COVER_REFRESH_SECONDS)).await;
+                collect_covers(&client, data.clone(), covers.clone()).await;
             }
         }
     });
@@ -1696,7 +1702,9 @@ async fn main() -> Result<()> {
         let data = app.data.clone();
         let threads = app.threads.clone();
         let covers = app.covers.clone();
+        let covers_ready = covers_ready.clone();
         async move {
+            covers_ready.notified().await;
             loop {
                 collect_games(&client, data.clone(), threads.clone(), covers.clone()).await;
                 tokio::time::sleep(Duration::from_secs(600)).await;
