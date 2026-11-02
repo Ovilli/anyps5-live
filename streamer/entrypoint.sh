@@ -86,14 +86,13 @@ duration=()
 gop=$(( FPS * 2 ))
 
 encode() {
-  # Fewer threads: on this many cores, spreading the conversion and the encoding costs more than it saves.
-  ffmpeg -filter_threads 1 -hide_banner -loglevel warning -nostats -y \
+  ffmpeg -hide_banner -loglevel warning -nostats -y \
     -thread_queue_size 512 -f x11grab -draw_mouse 0 -framerate "$CAPTURE_FPS" -video_size "${WIDTH}x${HEIGHT}" -i "${DISPLAY}.0" \
     "${audio[@]}" \
     -map 0:v -map 1:a \
     -vf "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p,fps=$FPS" \
     -colorspace bt709 -color_primaries bt709 -color_trc bt709 \
-    -threads 6 -c:v libx264 -preset "$PRESET" -b:v "$VIDEO_BITRATE" -maxrate "$VIDEO_BITRATE" -bufsize "$BUFSIZE" -x264-params nal-hrd=cbr \
+    -c:v libx264 -preset "$PRESET" -b:v "$VIDEO_BITRATE" -maxrate "$VIDEO_BITRATE" -bufsize "$BUFSIZE" -x264-params nal-hrd=cbr \
     -g "$gop" -keyint_min "$gop" -sc_threshold 0 \
     "${audio_filter[@]}" -c:a aac -b:a "$AUDIO_BITRATE" -ar 44100 -ac 2 \
     "${duration[@]}" -f "$FORMAT" "$OUTPUT"
